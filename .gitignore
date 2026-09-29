@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+.next/
+coverage/
+__pycache__/
+.pytest_cache/
+.venv/
+*.py[cod]
+
+# Local tooling
+.DS_Store
+Thumbs.db
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
