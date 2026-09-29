@@ -10,6 +10,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.py[cod]
+.eslintcache
 
 # Local tooling
 .DS_Store
