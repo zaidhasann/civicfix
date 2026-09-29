@@ -1,7 +1,37 @@
-@import 'tailwindcss';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
+  color-scheme: light;
+  --color-primary: 199 89% 42%;
+  --color-success: 152 58% 38%;
+  --color-warning: 36 92% 48%;
+  --color-danger: 3 72% 52%;
+  --color-neutral-50: 210 40% 98%;
+  --color-neutral-100: 210 40% 96%;
+  --color-neutral-200: 214 32% 91%;
+  --color-neutral-300: 213 27% 84%;
+  --color-neutral-400: 215 20% 65%;
+  --color-neutral-500: 215 16% 47%;
+  --color-neutral-600: 215 19% 35%;
+  --color-neutral-700: 217 24% 27%;
+  --color-neutral-800: 217 33% 17%;
+  --color-neutral-900: 222 47% 11%;
+  --color-surface: 0 0% 100%;
+  --color-text: 222 47% 11%;
+  --color-border: 214 32% 91%;
+}
+
+.dark {
   color-scheme: dark;
+  --color-primary: 198 92% 62%;
+  --color-success: 152 60% 54%;
+  --color-warning: 39 96% 62%;
+  --color-danger: 3 86% 68%;
+  --color-surface: 222 47% 11%;
+  --color-text: 210 40% 98%;
+  --color-border: 217 33% 25%;
 }
 
 * {
