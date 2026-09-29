@@ -1,3 +1,9 @@
 # CivicFix Web
 
-Placeholder for the CivicFix web application.
+Next.js App Router application for CivicFix.
+
+## Development
+
+```bash
+npm run dev
+```
