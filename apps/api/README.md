@@ -9,3 +9,11 @@ npm run dev --workspace apps/api
 ```
 
 The health check is available at `GET /health`.
+
+## Authentication
+
+- `POST /auth/register` creates a citizen account.
+- `POST /auth/login` returns a short-lived access token and sets an httpOnly refresh cookie.
+- `POST /auth/refresh` rotates the refresh cookie and returns a new access token.
+
+Set `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` to different random values of at least 32 characters.
