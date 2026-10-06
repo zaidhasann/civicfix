@@ -5,7 +5,13 @@ import { z } from 'zod';
 
 import { env } from '../config/env.js';
 import { UserModel, type UserDocument } from '../models/user.js';
-import { createAccessToken, createRefreshToken, verifyRefreshToken } from '../auth/tokens.js';
+import {
+  createAccessToken,
+  createAnonymousToken,
+  createRefreshToken,
+  verifyRefreshToken,
+} from '../auth/tokens.js';
+import { randomUUID } from 'node:crypto';
 
 const refreshCookieName = 'civicfix_refresh_token';
 const refreshCookieMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
@@ -96,6 +102,12 @@ authRouter.post('/login', async (request: Request, response: Response) => {
   const tokens = issueTokens(user.id);
   setRefreshCookie(response, tokens.refreshToken);
   response.json({ accessToken: tokens.accessToken, user: userResponse(user) });
+});
+
+authRouter.post('/anonymous', (_request: Request, response: Response) => {
+  const anonymousId = randomUUID();
+  const accessToken = createAnonymousToken(anonymousId, env.JWT_ACCESS_SECRET);
+  response.status(201).json({ accessToken, anonymousId });
 });
 
 authRouter.post('/refresh', async (request: Request, response: Response) => {
