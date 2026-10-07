@@ -6,12 +6,18 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader } from '../ui/card';
 import { Input } from '../ui/input';
-import { mockLogin, mockSignup, type AuthCredentials } from '../../lib/mock-auth';
+import { useAuth } from './auth-provider';
 
 type AuthMode = 'login' | 'signup';
 
 interface AuthFormProps {
   mode: AuthMode;
+}
+
+interface AuthCredentials {
+  email: string;
+  password: string;
+  name?: string;
 }
 
 type FormErrors = Partial<Record<'name' | 'email' | 'password' | 'form', string>>;
@@ -40,10 +46,11 @@ function validate(values: AuthCredentials, mode: AuthMode): FormErrors {
 
 export function AuthForm({ mode }: AuthFormProps) {
   const isSignup = mode === 'signup';
+  const { continueAnonymously, isLoading: isAuthLoading, login, signup } = useAuth();
   const [values, setValues] = useState<AuthCredentials>({ name: '', email: '', password: '' });
   const [errors, setErrors] = useState<FormErrors>({});
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
   function updateValue(field: keyof AuthCredentials, value: string) {
@@ -59,22 +66,35 @@ export function AuthForm({ mode }: AuthFormProps) {
     setSuccessMessage('');
     if (Object.keys(validationErrors).length > 0) return;
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
-      const result = isSignup ? await mockSignup(values) : await mockLogin(values);
-      setSuccessMessage(`Welcome, ${result.user.name}. Your account is ready.`);
+      const user = isSignup
+        ? await signup({ email: values.email, name: values.name ?? '', password: values.password })
+        : await login({ email: values.email, password: values.password });
+      setSuccessMessage(`Welcome, ${user.name}. Your account is ready.`);
     } catch (error) {
       setErrors({
         form: error instanceof Error ? error.message : 'Something went wrong. Please try again.',
       });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   }
 
-  function continueAnonymously() {
-    setSuccessMessage('You can continue anonymously and report an issue without an account.');
+  async function handleAnonymous() {
     setErrors({});
+    setSuccessMessage('');
+    setIsSubmitting(true);
+    try {
+      const user = await continueAnonymously();
+      setSuccessMessage(`Welcome, ${user.name}. You can report an issue without an account.`);
+    } catch (error) {
+      setErrors({
+        form: error instanceof Error ? error.message : 'Unable to continue anonymously.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -159,7 +179,7 @@ export function AuthForm({ mode }: AuthFormProps) {
               </div>
               <Button
                 className="w-full"
-                loading={isLoading}
+                loading={isSubmitting || isAuthLoading}
                 loadingLabel={isSignup ? 'Creating account' : 'Signing in'}
                 size="lg"
                 type="submit"
@@ -176,7 +196,8 @@ export function AuthForm({ mode }: AuthFormProps) {
 
             <Button
               className="w-full"
-              onClick={continueAnonymously}
+              disabled={isSubmitting || isAuthLoading}
+              onClick={handleAnonymous}
               size="lg"
               type="button"
               variant="secondary"
