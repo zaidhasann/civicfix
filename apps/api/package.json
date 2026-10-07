@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "seed:complaint": "tsx scripts/seed-complaint.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "node --test"
