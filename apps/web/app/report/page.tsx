@@ -4,6 +4,7 @@ import { useReducer } from 'react';
 
 import { ProtectedRoute } from '../../components/auth/protected-route';
 import { AppShell, PageContainer } from '../../components/layout/app-shell';
+import { PhotoCapture } from '../../components/report/photo-capture';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 
@@ -15,7 +16,7 @@ const steps = [
 
 type ReportState = {
   step: number;
-  photoName: string;
+  photo: File | null;
   location: string;
   title: string;
   description: string;
@@ -24,14 +25,14 @@ type ReportState = {
 type ReportAction =
   | { type: 'next' }
   | { type: 'back' }
-  | { type: 'set-photo'; photoName: string }
+  | { type: 'set-photo'; photo: File | null }
   | { type: 'set-location'; location: string }
   | { type: 'set-title'; title: string }
   | { type: 'set-description'; description: string };
 
 const initialState: ReportState = {
   step: 0,
-  photoName: '',
+  photo: null,
   location: '',
   title: '',
   description: '',
@@ -44,7 +45,7 @@ function reportReducer(state: ReportState, action: ReportAction): ReportState {
     case 'back':
       return { ...state, step: Math.max(state.step - 1, 0) };
     case 'set-photo':
-      return { ...state, photoName: action.photoName };
+      return { ...state, photo: action.photo };
     case 'set-location':
       return { ...state, location: action.location };
     case 'set-title':
@@ -106,40 +107,16 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   );
 }
 
-function PhotoStep({
-  photoName,
-  onPhotoChange,
-}: {
-  photoName: string;
-  onPhotoChange: (photoName: string) => void;
-}) {
+function PhotoStep({ onPhotoChange }: { onPhotoChange: (photo: File | null) => void }) {
   return (
     <div>
       <CardTitle>Add a photo</CardTitle>
       <p className="mt-2 text-sm leading-6 text-neutral-600">
         A clear photo helps your community understand and resolve the issue faster.
       </p>
-      <label className="mt-6 flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-neutral-50 px-5 text-center transition hover:border-primary hover:bg-primary/5">
-        <svg aria-hidden="true" className="h-10 w-10 text-primary" fill="none" viewBox="0 0 24 24">
-          <path
-            d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5M8 10l4-4m0 0 4 4m-4-4v11"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.8"
-          />
-        </svg>
-        <span className="mt-3 font-semibold text-text">
-          {photoName || 'Choose a photo to upload'}
-        </span>
-        <span className="mt-1 text-sm text-neutral-500">PNG, JPG up to 10MB</span>
-        <input
-          accept="image/png,image/jpeg"
-          className="sr-only"
-          onChange={(event) => onPhotoChange(event.target.files?.[0]?.name ?? '')}
-          type="file"
-        />
-      </label>
+      <div className="mt-6">
+        <PhotoCapture onChange={onPhotoChange} />
+      </div>
     </div>
   );
 }
@@ -242,10 +219,7 @@ function ReportFlow() {
               <Card>
                 <CardHeader className="p-5 pb-0 sm:p-8 sm:pb-0">
                   {state.step === 0 ? (
-                    <PhotoStep
-                      onPhotoChange={(photoName) => dispatch({ type: 'set-photo', photoName })}
-                      photoName={state.photoName}
-                    />
+                    <PhotoStep onPhotoChange={(photo) => dispatch({ type: 'set-photo', photo })} />
                   ) : null}
                   {state.step === 1 ? (
                     <LocationStep
