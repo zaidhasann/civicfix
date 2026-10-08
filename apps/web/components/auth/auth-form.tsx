@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '../ui/button';
@@ -45,6 +46,7 @@ function validate(values: AuthCredentials, mode: AuthMode): FormErrors {
 }
 
 export function AuthForm({ mode }: AuthFormProps) {
+  const router = useRouter();
   const isSignup = mode === 'signup';
   const { continueAnonymously, isLoading: isAuthLoading, login, signup } = useAuth();
   const [values, setValues] = useState<AuthCredentials>({ name: '', email: '', password: '' });
@@ -68,10 +70,12 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     setIsSubmitting(true);
     try {
-      const user = isSignup
-        ? await signup({ email: values.email, name: values.name ?? '', password: values.password })
-        : await login({ email: values.email, password: values.password });
-      setSuccessMessage(`Welcome, ${user.name}. Your account is ready.`);
+      if (isSignup) {
+        await signup({ email: values.email, name: values.name ?? '', password: values.password });
+      } else {
+        await login({ email: values.email, password: values.password });
+      }
+      router.replace('/report');
     } catch (error) {
       setErrors({
         form: error instanceof Error ? error.message : 'Something went wrong. Please try again.',
@@ -86,8 +90,8 @@ export function AuthForm({ mode }: AuthFormProps) {
     setSuccessMessage('');
     setIsSubmitting(true);
     try {
-      const user = await continueAnonymously();
-      setSuccessMessage(`Welcome, ${user.name}. You can report an issue without an account.`);
+      await continueAnonymously();
+      router.replace('/report');
     } catch (error) {
       setErrors({
         form: error instanceof Error ? error.message : 'Unable to continue anonymously.',
