@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import { env } from './config/env.js';
 import { getDatabaseStatus } from './db/mongoose.js';
 import { authRouter } from './routes/auth.js';
+import { uploadsRouter } from './routes/uploads.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 
 export function createApp(
@@ -26,6 +27,7 @@ export function createApp(
   });
 
   app.use('/auth', authRouter);
+  app.use('/uploads', uploadsRouter);
 
   app.use(createErrorHandler(logger));
 
