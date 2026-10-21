@@ -2,6 +2,7 @@ from civicfix_agent.graph import build_complaint_graph, run_complaint
 from civicfix_agent.ingestion import municipality_documents
 from civicfix_agent.resolver import LocationResolution
 from civicfix_agent.vector_store import SearchResult
+from civicfix_agent.writer import DraftOutput
 
 
 class FakeVectorStore:
@@ -37,7 +38,8 @@ def test_graph_runs_until_approval_interrupt() -> None:
 
     assert state['classification'].issue_type == 'other'
     assert state['jurisdiction'] == 'unresolved'
-    assert state['draft'] == 'A pothole is blocking the lane.'
+    assert isinstance(state['draft'], DraftOutput)
+    assert 'A pothole is blocking the lane.' in state['draft'].body
     assert state.get('approval') is None
 
     snapshot = graph.get_state({'configurable': {'thread_id': 'test-complaint'}})

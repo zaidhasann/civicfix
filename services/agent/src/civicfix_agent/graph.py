@@ -1,3 +1,4 @@
+from datetime import date
 from typing import NotRequired, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -8,6 +9,7 @@ from civicfix_agent.resolver import LocationResolution
 from civicfix_agent.resolver import resolve_location as resolve_location_with_rag
 from civicfix_agent.vector_store import VectorStore
 from civicfix_agent.vision import LLMClient
+from civicfix_agent.writer import DraftOutput, write_complaint_draft
 
 
 class ComplaintState(TypedDict):
@@ -17,9 +19,11 @@ class ComplaintState(TypedDict):
     coords: tuple[float, float]
     description: str
     geocoded_address: NotRequired[dict[str, str | None] | None]
+    report_date: NotRequired[str | None]
+    legal_references: NotRequired[list[object]]
     classification: NotRequired[ClassifierOutput | None]
     jurisdiction: NotRequired[LocationResolution | str | None]
-    draft: NotRequired[str | None]
+    draft: NotRequired[DraftOutput | str | None]
     approval: NotRequired[str | None]
 
 
@@ -61,10 +65,32 @@ def resolve_location(
     return {'jurisdiction': 'unresolved'}
 
 
-def write_draft(state: ComplaintState) -> dict[str, str]:
-    """Placeholder draft writer until the agent model is connected."""
+def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
+    """Write a validated complaint draft from the current graph state."""
 
-    return {'draft': state['description']}
+    classification = state.get('classification')
+    if not classification:
+        return {'draft': state['description']}
+    return {
+        'draft': write_complaint_draft(
+            issue_type=classification.issue_type,
+            severity=classification.severity,
+            address=state.get('geocoded_address') or {},
+            coordinates=state['coords'],
+            photo_url=state['photo_url'],
+            description=state['description'],
+            report_date=(
+                date.fromisoformat(report_date)
+                if (report_date := state.get('report_date'))
+                else None
+            ),
+            legal_references=[
+                reference
+                for reference in state.get('legal_references', [])
+                if hasattr(reference, 'metadata')
+            ],
+        )
+    }
 
 
 def await_approval(state: ComplaintState) -> dict[str, str]:
