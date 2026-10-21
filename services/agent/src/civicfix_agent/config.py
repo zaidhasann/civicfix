@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     llm_model: str = 'gpt-4o'
     llm_timeout_seconds: float = 20.0
     llm_max_image_bytes: int = 10 * 1024 * 1024
+    geocode_provider: Literal['nominatim', 'google'] = 'nominatim'
+    geocode_user_agent: str = 'CivicFix/0.1 (contact@example.com)'
+    geocode_timeout_seconds: float = 10.0
+    geocode_rate_limit_seconds: float = 1.0
+    geocode_cache_precision: int = 4
 
 
 @lru_cache
