@@ -30,7 +30,12 @@ class VectorStore(Protocol):
     def upsert(self, documents: Sequence[VectorDocument]) -> None:
         ...
 
-    def query(self, text: str, limit: int = 5) -> list[SearchResult]:
+    def query(
+        self,
+        text: str,
+        limit: int = 5,
+        metadata_filter: dict[str, str] | None = None,
+    ) -> list[SearchResult]:
         ...
 
 
@@ -75,13 +80,19 @@ class ChromaVectorStore:
             embeddings=[embed_text(document.text) for document in documents],
         )
 
-    def query(self, text: str, limit: int = 5) -> list[SearchResult]:
+    def query(
+        self,
+        text: str,
+        limit: int = 5,
+        metadata_filter: dict[str, str] | None = None,
+    ) -> list[SearchResult]:
         if limit < 1:
             raise ValueError('limit must be positive')
         result = self._collection.query(
             query_embeddings=[embed_text(text)],
             n_results=limit,
             include=['documents', 'metadatas', 'distances'],
+            where=metadata_filter or None,
         )
         documents = result.get('documents', [[]])[0]
         metadatas = result.get('metadatas', [[]])[0]
@@ -136,13 +147,19 @@ class PineconeVectorStore:
             ]
         )
 
-    def query(self, text: str, limit: int = 5) -> list[SearchResult]:
+    def query(
+        self,
+        text: str,
+        limit: int = 5,
+        metadata_filter: dict[str, str] | None = None,
+    ) -> list[SearchResult]:
         if limit < 1:
             raise ValueError('limit must be positive')
         response = self._index.query(
             vector=embed_text(text, self._dimension),
             top_k=limit,
             include_metadata=True,
+            filter=metadata_filter,
         )
         return [
             SearchResult(

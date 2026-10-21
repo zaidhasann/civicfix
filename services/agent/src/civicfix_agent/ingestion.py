@@ -41,6 +41,7 @@ def municipality_documents(path: Path | None = None) -> list[VectorDocument]:
             'ward': municipality.ward_zone,
             'department': municipality.department,
             'doc_type': 'municipality_directory',
+            'source_url': str(municipality.source_url),
         }
         for chunk_index, chunk in enumerate(chunk_text(text)):
             documents.append(

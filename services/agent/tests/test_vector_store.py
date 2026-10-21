@@ -35,4 +35,5 @@ def test_municipality_ingestion_upserts_searchable_chunks() -> None:
         'ward': 'Citywide',
         'department': 'Pune Municipal Corporation',
         'doc_type': 'municipality_directory',
+        'source_url': 'https://www.pmc.gov.in/',
     }

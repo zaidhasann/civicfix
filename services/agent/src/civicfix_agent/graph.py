@@ -4,6 +4,9 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from civicfix_agent.classifier import ClassifierOutput
+from civicfix_agent.resolver import LocationResolution
+from civicfix_agent.resolver import resolve_location as resolve_location_with_rag
+from civicfix_agent.vector_store import VectorStore
 from civicfix_agent.vision import LLMClient
 
 
@@ -13,8 +16,9 @@ class ComplaintState(TypedDict):
     photo_url: str
     coords: tuple[float, float]
     description: str
+    geocoded_address: NotRequired[dict[str, str | None] | None]
     classification: NotRequired[ClassifierOutput | None]
-    jurisdiction: NotRequired[str | None]
+    jurisdiction: NotRequired[LocationResolution | str | None]
     draft: NotRequired[str | None]
     approval: NotRequired[str | None]
 
@@ -40,9 +44,20 @@ def classify(
     }
 
 
-def resolve_location(state: ComplaintState) -> dict[str, str]:
-    """Placeholder jurisdiction resolver based on the submitted coordinates."""
+def resolve_location(
+    state: ComplaintState,
+    vector_store: VectorStore | None = None,
+) -> dict[str, LocationResolution | str]:
+    """Resolve jurisdiction with RAG when a geocoded address and store are available."""
 
+    if vector_store and state.get('geocoded_address') and state.get('classification'):
+        return {
+            'jurisdiction': resolve_location_with_rag(
+                state['geocoded_address'] or {},
+                state['classification'].issue_type,
+                vector_store,
+            )
+        }
     return {'jurisdiction': 'unresolved'}
 
 
@@ -61,12 +76,13 @@ def await_approval(state: ComplaintState) -> dict[str, str]:
 def build_complaint_graph(
     checkpointer: MemorySaver | None = None,
     llm_client: LLMClient | None = None,
+    vector_store: VectorStore | None = None,
 ):
     """Build a checkpointed graph that interrupts before human approval."""
 
     builder = StateGraph(ComplaintState)
     builder.add_node('classify', lambda state: classify(state, llm_client))
-    builder.add_node('resolve_location', resolve_location)
+    builder.add_node('resolve_location', lambda state: resolve_location(state, vector_store))
     builder.add_node('write_draft', write_draft)
     builder.add_node('await_approval', await_approval)
     builder.add_edge(START, 'classify')
