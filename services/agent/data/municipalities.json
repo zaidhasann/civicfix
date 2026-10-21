@@ -1,0 +1,22 @@
+{
+  "municipalities": [
+    {
+      "city": "Pune",
+      "ward_zone": "Citywide",
+      "department": "Pune Municipal Corporation",
+      "category_responsibilities": {
+        "pothole": "Road maintenance and repair",
+        "streetlight": "Public street lighting",
+        "garbage": "Solid waste collection and sanitation",
+        "drainage": "Storm-water drainage and public drains",
+        "other": "Route to the relevant municipal department"
+      },
+      "official_email": null,
+      "notice_format_notes": "Use the complaint reference, precise location, issue category, description, and attached evidence. Department routing and notice format are not confirmed in this pilot dataset.",
+      "source_url": "https://www.pmc.gov.in/",
+      "last_verified_date": null,
+      "verification_status": "unverified",
+      "verification_notes": "Pilot seed based on the official Pune Municipal Corporation website and broad civic-service remit. Department ownership, ward routing, and official complaint email require confirmation before production use."
+    }
+  ]
+}
