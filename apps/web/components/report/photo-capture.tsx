@@ -3,6 +3,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '../ui/button';
+import {
+  uploadPhoto,
+  type PhotoUploadProgress,
+  type PhotoUploadResult,
+} from '../../lib/upload-photo';
 
 const MAX_INPUT_SIZE = 10 * 1024 * 1024;
 const MAX_OUTPUT_SIZE = 1.5 * 1024 * 1024;
@@ -11,6 +16,7 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 interface PhotoCaptureProps {
   onChange: (file: File | null) => void;
+  onUpload?: (result: PhotoUploadResult | null) => void;
 }
 
 function getOutputName(name: string): string {
@@ -95,7 +101,7 @@ async function compressImage(file: File): Promise<File> {
   });
 }
 
-export function PhotoCapture({ onChange }: PhotoCaptureProps) {
+export function PhotoCapture({ onChange, onUpload }: PhotoCaptureProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -103,6 +109,7 @@ export function PhotoCapture({ onChange }: PhotoCaptureProps) {
   const [error, setError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<PhotoUploadProgress | null>(null);
 
   useEffect(
     () => () => {
@@ -124,8 +131,18 @@ export function PhotoCapture({ onChange }: PhotoCaptureProps) {
       });
       setFileName(compressedFile.name);
       onChange(compressedFile);
+      setUploadProgress({ loaded: 0, percent: 0, total: 0 });
+      const uploadFile = file.size <= MAX_INPUT_SIZE ? file : compressedFile;
+      const uploadResult = await uploadPhoto(uploadFile, setUploadProgress);
+      onUpload?.(uploadResult);
     } catch (processingError) {
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return '';
+      });
+      setFileName('');
       onChange(null);
+      onUpload?.(null);
       setError(
         processingError instanceof Error
           ? processingError.message
@@ -154,7 +171,9 @@ export function PhotoCapture({ onChange }: PhotoCaptureProps) {
     });
     setFileName('');
     setError('');
+    setUploadProgress(null);
     onChange(null);
+    onUpload?.(null);
   }
 
   if (previewUrl) {
@@ -167,10 +186,28 @@ export function PhotoCapture({ onChange }: PhotoCaptureProps) {
           <p className="min-w-0 truncate text-sm text-neutral-600" title={fileName}>
             {fileName}
           </p>
-          <Button onClick={clearPhoto} size="sm" variant="secondary">
+          <Button disabled={isProcessing} onClick={clearPhoto} size="sm" variant="secondary">
             Retake photo
           </Button>
         </div>
+        {uploadProgress && uploadProgress.percent < 100 ? (
+          <div
+            aria-label="Photo upload progress"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={uploadProgress.percent}
+            className="space-y-1"
+            role="progressbar"
+          >
+            <div className="h-2 overflow-hidden rounded-full bg-neutral-200">
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{ width: `${uploadProgress.percent}%` }}
+              />
+            </div>
+            <p className="text-xs text-neutral-500">Uploading photo ({uploadProgress.percent}%)</p>
+          </div>
+        ) : null}
       </div>
     );
   }

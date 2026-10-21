@@ -7,6 +7,7 @@ import { AppShell, PageContainer } from '../../components/layout/app-shell';
 import { PhotoCapture } from '../../components/report/photo-capture';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import type { PhotoUploadResult } from '../../lib/upload-photo';
 
 const steps = [
   { title: 'Photo', description: 'Add a photo of the issue' },
@@ -17,6 +18,7 @@ const steps = [
 type ReportState = {
   step: number;
   photo: File | null;
+  photoUpload: PhotoUploadResult | null;
   location: string;
   title: string;
   description: string;
@@ -26,6 +28,7 @@ type ReportAction =
   | { type: 'next' }
   | { type: 'back' }
   | { type: 'set-photo'; photo: File | null }
+  | { type: 'set-photo-upload'; upload: PhotoUploadResult | null }
   | { type: 'set-location'; location: string }
   | { type: 'set-title'; title: string }
   | { type: 'set-description'; description: string };
@@ -33,6 +36,7 @@ type ReportAction =
 const initialState: ReportState = {
   step: 0,
   photo: null,
+  photoUpload: null,
   location: '',
   title: '',
   description: '',
@@ -46,6 +50,8 @@ function reportReducer(state: ReportState, action: ReportAction): ReportState {
       return { ...state, step: Math.max(state.step - 1, 0) };
     case 'set-photo':
       return { ...state, photo: action.photo };
+    case 'set-photo-upload':
+      return { ...state, photoUpload: action.upload };
     case 'set-location':
       return { ...state, location: action.location };
     case 'set-title':
@@ -107,7 +113,13 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   );
 }
 
-function PhotoStep({ onPhotoChange }: { onPhotoChange: (photo: File | null) => void }) {
+function PhotoStep({
+  onPhotoChange,
+  onPhotoUpload,
+}: {
+  onPhotoChange: (photo: File | null) => void;
+  onPhotoUpload: (upload: PhotoUploadResult | null) => void;
+}) {
   return (
     <div>
       <CardTitle>Add a photo</CardTitle>
@@ -115,7 +127,7 @@ function PhotoStep({ onPhotoChange }: { onPhotoChange: (photo: File | null) => v
         A clear photo helps your community understand and resolve the issue faster.
       </p>
       <div className="mt-6">
-        <PhotoCapture onChange={onPhotoChange} />
+        <PhotoCapture onChange={onPhotoChange} onUpload={onPhotoUpload} />
       </div>
     </div>
   );
@@ -219,7 +231,18 @@ function ReportFlow() {
               <Card>
                 <CardHeader className="p-5 pb-0 sm:p-8 sm:pb-0">
                   {state.step === 0 ? (
-                    <PhotoStep onPhotoChange={(photo) => dispatch({ type: 'set-photo', photo })} />
+                    <PhotoStep
+                      onPhotoChange={(photo) => dispatch({ type: 'set-photo', photo })}
+                      onPhotoUpload={(upload) => {
+                        dispatch({ type: 'set-photo-upload', upload });
+                        if (upload?.exifCoords && !state.location) {
+                          dispatch({
+                            type: 'set-location',
+                            location: `${upload.exifCoords.latitude}, ${upload.exifCoords.longitude}`,
+                          });
+                        }
+                      }}
+                    />
                   ) : null}
                   {state.step === 1 ? (
                     <LocationStep
