@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 
 import { env } from '../config/env.js';
@@ -31,7 +31,7 @@ function getBearerToken(authorization: string | undefined): string {
   return token;
 }
 
-export const requireAuth: RequestHandler = async (request) => {
+export const requireAuth: RequestHandler = async (request, _response, next: NextFunction) => {
   const token = getBearerToken(request.get('authorization'));
   let payload;
   try {
@@ -50,6 +50,7 @@ export const requireAuth: RequestHandler = async (request) => {
       role: 'anonymous',
       scopes: payload.scope ?? [],
     };
+    next();
     return;
   }
 
@@ -57,6 +58,7 @@ export const requireAuth: RequestHandler = async (request) => {
   if (!user) throw new AuthenticationError('Invalid access token');
 
   request.user = { id: user.id, kind: 'user', role: user.role };
+  next();
 };
 
 export function requireRole(...roles: UserRole[]): RequestHandler {

@@ -9,7 +9,7 @@
     "seed:complaint": "tsx scripts/seed-complaint.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "node --test"
+    "test": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -31,6 +31,10 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "latest",
     "tsx": "^4.19.3",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "supertest": "^7.1.4",
+    "@types/supertest": "^6.0.3",
+    "mongodb-memory-server": "^10.4.3"
   }
 }
