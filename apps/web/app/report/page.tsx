@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '../../components/auth/protected-route';
 import { AppShell, PageContainer } from '../../components/layout/app-shell';
 import { PhotoCapture } from '../../components/report/photo-capture';
+import { LocationPicker } from '../../components/report/location-picker';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { useGeolocation } from '../../hooks/use-geolocation';
@@ -145,13 +146,13 @@ function PhotoStep({
 }
 
 function LocationStep({
-  location,
+  currentCoordinates,
   onCoordinatesChange,
   onLocationChange,
   coordinates,
 }: {
-  location: string;
   coordinates: { latitude: number; longitude: number } | null;
+  currentCoordinates: { latitude: number; longitude: number } | null;
   onCoordinatesChange: (coordinates: { latitude: number; longitude: number } | null) => void;
   onLocationChange: (location: string) => void;
 }) {
@@ -161,35 +162,18 @@ function LocationStep({
       <p className="mt-2 text-sm leading-6 text-neutral-600">
         Add an address or landmark so the right team can find it.
       </p>
-      <label className="mt-6 block text-sm font-semibold text-text" htmlFor="report-location">
-        Address or landmark
-      </label>
-      <input
-        className="mt-2 min-h-11 w-full rounded-md border border-border bg-surface px-3 text-text outline-none transition placeholder:text-neutral-400 focus:border-primary focus:ring-2 focus:ring-primary/20"
-        id="report-location"
-        onChange={(event) => onLocationChange(event.target.value)}
-        placeholder="e.g. Main Street near the library"
-        type="text"
-        value={location}
-      />
-      <button
-        className="mt-4 inline-flex items-center gap-2 rounded-md text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        onClick={() => {
-          if (coordinates) {
-            onCoordinatesChange(coordinates);
+      <LocationPicker
+        coordinates={coordinates}
+        currentCoordinates={currentCoordinates}
+        onAddressChange={onLocationChange}
+        onCoordinatesChange={onCoordinatesChange}
+        onUseMyLocation={() => {
+          if (currentCoordinates) {
+            onCoordinatesChange(currentCoordinates);
             onLocationChange('Current location');
           }
         }}
-        type="button"
-      >
-        <span aria-hidden="true">◎</span>
-        Use my current location
-      </button>
-      {!coordinates ? (
-        <p className="mt-2 text-xs text-neutral-500">
-          Use your current location or select a photo with GPS metadata to attach map coordinates.
-        </p>
-      ) : null}
+      />
     </div>
   );
 }
@@ -336,7 +320,7 @@ function ReportFlow() {
                   {state.step === 1 ? (
                     <LocationStep
                       coordinates={state.coordinates ?? geolocation.coords}
-                      location={state.location}
+                      currentCoordinates={geolocation.coords}
                       onCoordinatesChange={(coordinates) =>
                         dispatch({ type: 'set-coordinates', coordinates })
                       }

@@ -12,7 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@types/mapbox-gl": "^3.4.1",
     "exifr": "^7.1.3",
+    "mapbox-gl": "^3.33.0",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
