@@ -3,6 +3,8 @@ from typing import NotRequired, TypedDict
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from civicfix_agent.classifier import ClassifierOutput
+
 
 class ComplaintState(TypedDict):
     """State carried through the complaint processing graph."""
@@ -10,16 +12,24 @@ class ComplaintState(TypedDict):
     photo_url: str
     coords: tuple[float, float]
     description: str
-    classification: NotRequired[str | None]
+    classification: NotRequired[ClassifierOutput | None]
     jurisdiction: NotRequired[str | None]
     draft: NotRequired[str | None]
     approval: NotRequired[str | None]
 
 
-def classify(state: ComplaintState) -> dict[str, str]:
+def classify(state: ComplaintState) -> dict[str, ClassifierOutput]:
     """Placeholder classifier until the agent model is connected."""
 
-    return {'classification': 'other'}
+    return {
+        'classification': ClassifierOutput(
+            issue_type='other',
+            severity=1,
+            confidence=0,
+            visible_details=state['description'],
+            safety_risk=False,
+        )
+    }
 
 
 def resolve_location(state: ComplaintState) -> dict[str, str]:

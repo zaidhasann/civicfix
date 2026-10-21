@@ -14,7 +14,7 @@ def test_graph_runs_until_approval_interrupt() -> None:
         graph=graph,
     )
 
-    assert state['classification'] == 'other'
+    assert state['classification'].issue_type == 'other'
     assert state['jurisdiction'] == 'unresolved'
     assert state['draft'] == 'A pothole is blocking the lane.'
     assert state.get('approval') is None
