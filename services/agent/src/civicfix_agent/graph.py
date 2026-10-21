@@ -1,5 +1,5 @@
 from datetime import date
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -25,6 +25,7 @@ class ComplaintState(TypedDict):
     jurisdiction: NotRequired[LocationResolution | str | None]
     draft: NotRequired[DraftOutput | str | None]
     approval: NotRequired[str | None]
+    needs_input: NotRequired[bool]
 
 
 def classify(
@@ -65,6 +66,28 @@ def resolve_location(
     return {'jurisdiction': 'unresolved'}
 
 
+def route_after_classification(
+    state: ComplaintState,
+) -> Literal['resolve_location', 'needs_input']:
+    classification = state.get('classification')
+    if not classification or classification.issue_type == 'not_an_issue':
+        return 'needs_input'
+    if classification.confidence < 0.4:
+        return 'needs_input'
+    return 'resolve_location'
+
+
+def route_after_resolution(
+    state: ComplaintState,
+) -> Literal['write_draft', 'needs_input']:
+    jurisdiction = state.get('jurisdiction')
+    if isinstance(jurisdiction, LocationResolution):
+        if jurisdiction.needs_user_review or jurisdiction.confidence < 0.4:
+            return 'needs_input'
+        return 'write_draft'
+    return 'needs_input'
+
+
 def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
     """Write a validated complaint draft from the current graph state."""
 
@@ -93,6 +116,12 @@ def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
     }
 
 
+def needs_input(state: ComplaintState) -> dict[str, bool]:
+    """Terminal state for reports requiring more user input or review."""
+
+    return {'needs_input': True}
+
+
 def await_approval(state: ComplaintState) -> dict[str, str]:
     """Placeholder approval node resumed after a human decision."""
 
@@ -110,11 +139,21 @@ def build_complaint_graph(
     builder.add_node('classify', lambda state: classify(state, llm_client))
     builder.add_node('resolve_location', lambda state: resolve_location(state, vector_store))
     builder.add_node('write_draft', write_draft)
+    builder.add_node('needs_input', needs_input)
     builder.add_node('await_approval', await_approval)
     builder.add_edge(START, 'classify')
-    builder.add_edge('classify', 'resolve_location')
-    builder.add_edge('resolve_location', 'write_draft')
+    builder.add_conditional_edges(
+        'classify',
+        route_after_classification,
+        {'resolve_location': 'resolve_location', 'needs_input': 'needs_input'},
+    )
+    builder.add_conditional_edges(
+        'resolve_location',
+        route_after_resolution,
+        {'write_draft': 'write_draft', 'needs_input': 'needs_input'},
+    )
     builder.add_edge('write_draft', 'await_approval')
+    builder.add_edge('needs_input', END)
     builder.add_edge('await_approval', END)
 
     return builder.compile(
