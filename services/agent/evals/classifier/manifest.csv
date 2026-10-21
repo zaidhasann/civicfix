@@ -1,0 +1,31 @@
+image_url,description,label
+fixture://pothole-01,"Deep pothole in the traffic lane",pothole
+fixture://pothole-02,"Several potholes near the intersection",pothole
+fixture://pothole-03,"Broken road surface creates a rough patch",pothole
+fixture://pothole-04,"Large hole beside the curb",pothole
+fixture://pothole-05,"Small pothole collecting water",pothole
+fixture://streetlight-01,"Streetlight is not illuminated at night",streetlight
+fixture://streetlight-02,"Broken lamp post beside the road",streetlight
+fixture://streetlight-03,"The neighborhood streetlight is flickering",streetlight
+fixture://streetlight-04,"A dark streetlight leaves the sidewalk unlit",streetlight
+fixture://streetlight-05,"Street lamp fixture is damaged",streetlight
+fixture://garbage-01,"Overflowing garbage bin on the sidewalk",garbage
+fixture://garbage-02,"Trash bags are scattered beside the road",garbage
+fixture://garbage-03,"Uncollected waste is blocking the footpath",garbage
+fixture://garbage-04,"Dumped rubbish near the park entrance",garbage
+fixture://garbage-05,"Public bin is full of garbage",garbage
+fixture://drainage-01,"Blocked storm drain is flooding the street",drainage
+fixture://drainage-02,"Open drain beside the sidewalk needs repair",drainage
+fixture://drainage-03,"Drainage grate is broken near the crossing",drainage
+fixture://drainage-04,"Standing water from a clogged drain",drainage
+fixture://drainage-05,"Drain channel is overflowing after rain",drainage
+fixture://other-01,"Graffiti covers the wall beside the library",other
+fixture://other-02,"A public bench is damaged",other
+fixture://other-03,"Tree branch has fallen across the park path",other
+fixture://other-04,"Traffic sign is leaning near the school",other
+fixture://other-05,"Public restroom door is broken",other
+fixture://not-an-issue-01,"A clear sunny street with no visible problem",not_an_issue
+fixture://not-an-issue-02,"A normal building entrance in good condition",not_an_issue
+fixture://not-an-issue-03,"A clean sidewalk with no obstruction",not_an_issue
+fixture://not-an-issue-04,"A well maintained street with working lights",not_an_issue
+fixture://not-an-issue-05,"A harmless community garden scene",not_an_issue
