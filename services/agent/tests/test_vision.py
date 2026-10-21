@@ -1,5 +1,6 @@
 import httpx
 import pytest
+
 from civicfix_agent.config import Settings
 from civicfix_agent.vision import VisionLLMClient
 

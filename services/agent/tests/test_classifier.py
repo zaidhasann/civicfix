@@ -1,6 +1,7 @@
 import pytest
-from civicfix_agent.classifier import ClassifierOutput, classify_with_retry
 from pydantic import ValidationError
+
+from civicfix_agent.classifier import ClassifierOutput, classify_with_retry
 
 
 def test_classifier_schema_accepts_valid_output() -> None:
