@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,6 +12,11 @@ class Settings(BaseSettings):
     environment: str = 'development'
     log_level: str = 'INFO'
     port: int = 8000
+    llm_provider: Literal['openai', 'gemini'] = 'openai'
+    llm_api_key: str = ''
+    llm_model: str = 'gpt-4o'
+    llm_timeout_seconds: float = 20.0
+    llm_max_image_bytes: int = 10 * 1024 * 1024
 
 
 @lru_cache

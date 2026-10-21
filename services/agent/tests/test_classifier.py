@@ -34,11 +34,11 @@ def test_classifier_schema_rejects_invalid_values(field: str, value: object) -> 
         )
 
 
-class FakeStructuredModel:
+class FakeModel:
     def __init__(self) -> None:
         self.calls = 0
 
-    def invoke(self, _messages: list[tuple[str, str]]) -> object:
+    def classify(self, _image_url: str, _description: str) -> object:
         self.calls += 1
         if self.calls == 1:
             return {'issue_type': 'invalid'}
@@ -49,15 +49,6 @@ class FakeStructuredModel:
             'visible_details': 'A lamp is not illuminated.',
             'safety_risk': False,
         }
-
-
-class FakeModel:
-    def __init__(self) -> None:
-        self.structured = FakeStructuredModel()
-
-    def with_structured_output(self, _schema: type[ClassifierOutput]) -> FakeStructuredModel:
-        return self.structured
-
 
 def test_classifier_retries_malformed_structured_output() -> None:
     result = classify_with_retry(
