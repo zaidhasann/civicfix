@@ -5,6 +5,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from civicfix_agent.classifier import ClassifierOutput
+from civicfix_agent.guardrails import (
+    PhotoPrivacyAssessment,
+    PhotoPrivacyDetector,
+    assess_photo_privacy,
+    redact_untrusted_description,
+)
 from civicfix_agent.resolver import LocationResolution
 from civicfix_agent.resolver import resolve_location as resolve_location_with_rag
 from civicfix_agent.vector_store import VectorStore
@@ -18,6 +24,8 @@ class ComplaintState(TypedDict):
     photo_url: str
     coords: tuple[float, float]
     description: str
+    sanitized_description: NotRequired[str]
+    photo_privacy: NotRequired[PhotoPrivacyAssessment | None]
     geocoded_address: NotRequired[dict[str, str | None] | None]
     report_date: NotRequired[str | None]
     legal_references: NotRequired[list[object]]
@@ -37,13 +45,18 @@ def classify(
     if llm_client:
         from civicfix_agent.classifier import classify_with_retry
 
-        return {'classification': classify_with_retry(llm_client, state)}
+        safe_state = dict(state)
+        safe_state['description'] = state.get('sanitized_description') or redact_untrusted_description(
+            state['description']
+        )
+        return {'classification': classify_with_retry(llm_client, safe_state)}
     return {
         'classification': ClassifierOutput(
             issue_type='other',
             severity=1,
             confidence=0,
-            visible_details=state['description'],
+            visible_details=state.get('sanitized_description')
+            or redact_untrusted_description(state['description']),
             safety_risk=False,
         )
     }
@@ -101,7 +114,9 @@ def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
             address=state.get('geocoded_address') or {},
             coordinates=state['coords'],
             photo_url=state['photo_url'],
-            description=state['description'],
+            description=state.get('sanitized_description') or redact_untrusted_description(
+                state['description']
+            ),
             report_date=(
                 date.fromisoformat(report_date)
                 if (report_date := state.get('report_date'))
@@ -113,6 +128,16 @@ def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
                 if hasattr(reference, 'metadata')
             ],
         )
+    }
+
+
+def apply_guardrails(
+    state: ComplaintState,
+    photo_detector: PhotoPrivacyDetector | None = None,
+) -> dict[str, str | PhotoPrivacyAssessment]:
+    return {
+        'sanitized_description': redact_untrusted_description(state['description']),
+        'photo_privacy': assess_photo_privacy(state['photo_url'], photo_detector),
     }
 
 
@@ -132,16 +157,19 @@ def build_complaint_graph(
     checkpointer: MemorySaver | None = None,
     llm_client: LLMClient | None = None,
     vector_store: VectorStore | None = None,
+    photo_detector: PhotoPrivacyDetector | None = None,
 ):
     """Build a checkpointed graph that interrupts before human approval."""
 
     builder = StateGraph(ComplaintState)
     builder.add_node('classify', lambda state: classify(state, llm_client))
+    builder.add_node('guardrails', lambda state: apply_guardrails(state, photo_detector))
     builder.add_node('resolve_location', lambda state: resolve_location(state, vector_store))
     builder.add_node('write_draft', write_draft)
     builder.add_node('needs_input', needs_input)
     builder.add_node('await_approval', await_approval)
-    builder.add_edge(START, 'classify')
+    builder.add_edge(START, 'guardrails')
+    builder.add_edge('guardrails', 'classify')
     builder.add_conditional_edges(
         'classify',
         route_after_classification,
