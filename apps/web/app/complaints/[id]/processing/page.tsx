@@ -44,7 +44,7 @@ export default function ComplaintProcessingPage() {
       const complaint = await apiFetch<ComplaintResponse>(`/complaints/${complaintId}`);
       setError(null);
       if (complaint.status === 'pending_approval') {
-        router.replace(`/complaints/${complaintId}/approval`);
+        router.replace(`/complaints/${complaintId}/review`);
         return true;
       }
       if (complaint.status === 'rejected') {
