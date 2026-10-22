@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     geocode_timeout_seconds: float = 10.0
     geocode_rate_limit_seconds: float = 1.0
     geocode_cache_precision: int = 4
+    run_secret: str = ''
+    checkpoint_db: str = '.civicfix/runs.sqlite'
 
 
 @lru_cache
