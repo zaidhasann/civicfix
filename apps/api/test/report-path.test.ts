@@ -200,4 +200,52 @@ describe('complaints', () => {
 
     expect(response.status).toBe(400);
   });
+
+  it('allows editing, regenerating, rejecting, and approving a pending complaint', async () => {
+    const authorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', authorization)
+      .send({ lat: 18.5204, lng: 73.8567 });
+    const id = createResponse.body._id;
+    await request(app)
+      .post(`/internal/complaints/${id}/ai-results`)
+      .set('X-Agent-Secret', 'test-agent-secret')
+      .send({
+        classification: {
+          issueType: 'pothole',
+          severity: 3,
+          confidence: 0.8,
+          visibleDetails: 'Pothole visible',
+          safetyRisk: false,
+        },
+        recipient: {
+          department: 'PMC',
+          email: 'roads@example.com',
+          ward: 'Citywide',
+          municipality: 'Pune',
+        },
+        draft: { subject: 'Original', body: 'Original body' },
+      });
+
+    const edit = await request(app)
+      .patch(`/complaints/${id}/draft`)
+      .set('Authorization', authorization)
+      .send({ subject: 'Edited', body: 'Edited body', recipientEmail: 'new@example.com' });
+    expect(edit.status).toBe(200);
+    expect(edit.body.aiDraft.subject).toBe('Edited');
+    expect(edit.body.recipient.email).toBe('new@example.com');
+
+    const regenerated = await request(app)
+      .post(`/complaints/${id}/regenerate`)
+      .set('Authorization', authorization);
+    expect(regenerated.status).toBe(200);
+    expect(regenerated.body.aiDraft.subject).toContain('pothole');
+
+    const rejected = await request(app)
+      .post(`/complaints/${id}/reject`)
+      .set('Authorization', authorization);
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.status).toBe('rejected');
+  });
 });

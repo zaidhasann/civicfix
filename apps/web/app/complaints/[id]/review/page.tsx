@@ -9,7 +9,8 @@ import { Button } from '../../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card';
 import { ErrorState } from '../../../../components/ui/error-state';
 import { LoadingState } from '../../../../components/ui/loading-state';
-import { apiFetch, ApiError } from '../../../../lib/api';
+import { apiFetch, apiPost, ApiError } from '../../../../lib/api';
+import { Modal } from '../../../../components/ui/modal';
 
 interface Complaint {
   photoUrl?: string;
@@ -39,11 +40,27 @@ export default function ComplaintReviewPage() {
   const complaintId = params.id;
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [initialDraft, setInitialDraft] = useState({ subject: '', body: '', recipientEmail: '' });
+  const [request, setRequest] = useState<'save' | 'regenerate' | 'reject' | 'approve' | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
 
   const loadComplaint = useCallback(async () => {
     try {
       setError(null);
-      setComplaint(await apiFetch<Complaint>(`/complaints/${complaintId}`));
+      const loaded = await apiFetch<Complaint>(`/complaints/${complaintId}`);
+      setComplaint(loaded);
+      const draft = {
+        subject: loaded.aiDraft?.subject ?? '',
+        body: loaded.aiDraft?.body ?? '',
+        recipientEmail: loaded.recipient.email,
+      };
+      setSubject(draft.subject);
+      setBody(draft.body);
+      setRecipientEmail(draft.recipientEmail);
+      setInitialDraft(draft);
     } catch (requestError) {
       setError(
         requestError instanceof ApiError
@@ -52,6 +69,87 @@ export default function ComplaintReviewPage() {
       );
     }
   }, [complaintId]);
+
+  const dirty =
+    subject !== initialDraft.subject ||
+    body !== initialDraft.body ||
+    recipientEmail !== initialDraft.recipientEmail;
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail);
+  const busy = request !== null;
+
+  async function saveDraft(): Promise<boolean> {
+    if (!emailValid || !subject.trim() || !body.trim()) return false;
+    setRequest('save');
+    try {
+      const updated = await apiFetch<Complaint>(`/complaints/${complaintId}/draft`, {
+        method: 'PATCH',
+        body: JSON.stringify({ subject, body, recipientEmail }),
+      });
+      setComplaint(updated);
+      setInitialDraft({ subject, body, recipientEmail });
+      setError(null);
+      return true;
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Could not save changes.');
+    } finally {
+      setRequest(null);
+    }
+    return false;
+  }
+
+  async function regenerate() {
+    setRequest('regenerate');
+    try {
+      const updated = await apiPost<Complaint>(`/complaints/${complaintId}/regenerate`);
+      setComplaint(updated);
+      setSubject(updated.aiDraft?.subject ?? '');
+      setBody(updated.aiDraft?.body ?? '');
+      setInitialDraft({
+        subject: updated.aiDraft?.subject ?? '',
+        body: updated.aiDraft?.body ?? '',
+        recipientEmail: updated.recipient.email,
+      });
+      setError(null);
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiError ? requestError.message : 'Could not regenerate the draft.',
+      );
+    } finally {
+      setRequest(null);
+    }
+  }
+
+  async function reject() {
+    setRequest('reject');
+    try {
+      await apiPost(`/complaints/${complaintId}/reject`);
+      setRejectOpen(false);
+      await loadComplaint();
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiError ? requestError.message : 'Could not reject this report.',
+      );
+    } finally {
+      setRequest(null);
+    }
+  }
+
+  async function approve() {
+    if (dirty) {
+      if (!(await saveDraft())) return;
+    }
+    setRequest('approve');
+    try {
+      await apiPost(`/complaints/${complaintId}/approve`);
+      await loadComplaint();
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiError ? requestError.message : 'Could not approve this report.',
+      );
+    } finally {
+      setRequest(null);
+    }
+  }
 
   useEffect(() => {
     void loadComplaint();
@@ -115,7 +213,22 @@ export default function ComplaintReviewPage() {
                   </CardHeader>
                   <CardContent className="space-y-1 text-sm">
                     <p className="font-semibold text-text">{complaint.recipient.department}</p>
-                    <p className="break-all text-neutral-600">{complaint.recipient.email}</p>
+                    <label
+                      className="block text-sm font-semibold text-text"
+                      htmlFor="recipient-email"
+                    >
+                      Recipient email
+                    </label>
+                    <input
+                      className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      id="recipient-email"
+                      onChange={(event) => setRecipientEmail(event.target.value)}
+                      type="email"
+                      value={recipientEmail}
+                    />
+                    {!emailValid && (
+                      <p className="mt-1 text-xs text-danger">Enter a valid email.</p>
+                    )}
                     <p className="text-neutral-600">
                       {complaint.recipient.municipality} · {complaint.recipient.ward}
                     </p>
@@ -140,13 +253,23 @@ export default function ComplaintReviewPage() {
                             <span className="font-semibold text-neutral-600">To:</span>{' '}
                             <span className="break-all">{complaint.recipient.email}</span>
                           </p>
-                          <p>
-                            <span className="font-semibold text-neutral-600">Subject:</span>{' '}
-                            {complaint.aiDraft.subject}
-                          </p>
+                          <label className="block">
+                            <span className="font-semibold text-neutral-600">Subject</span>
+                            <input
+                              className="mt-1 w-full rounded border border-border bg-surface px-2 py-1 text-sm"
+                              disabled={busy}
+                              onChange={(event) => setSubject(event.target.value)}
+                              value={subject}
+                            />
+                          </label>
                         </div>
                         <div className="whitespace-pre-wrap break-words pt-5 text-sm leading-7 text-text">
-                          {complaint.aiDraft.body}
+                          <textarea
+                            className="min-h-64 w-full resize-y rounded border border-border bg-surface p-2 text-sm leading-7 text-text"
+                            disabled={busy}
+                            onChange={(event) => setBody(event.target.value)}
+                            value={body}
+                          />
                         </div>
                       </article>
                     ) : (
@@ -157,9 +280,57 @@ export default function ComplaintReviewPage() {
                   </CardContent>
                 </Card>
 
-                <Button className="w-full sm:w-auto" disabled>
-                  Approve and send
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    disabled={busy || !dirty || !emailValid}
+                    loading={request === 'save'}
+                    onClick={() => void saveDraft()}
+                  >
+                    Save changes
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    loading={request === 'regenerate'}
+                    onClick={() => void regenerate()}
+                    variant="secondary"
+                  >
+                    Regenerate
+                  </Button>
+                  <Button disabled={busy} onClick={() => setRejectOpen(true)} variant="danger">
+                    Reject
+                  </Button>
+                  <Button
+                    disabled={busy || !emailValid || !subject.trim() || !body.trim()}
+                    loading={request === 'approve'}
+                    onClick={() => void approve()}
+                  >
+                    Approve and Send
+                  </Button>
+                </div>
+                <Modal
+                  description="Rejecting this report will stop it from being sent."
+                  onClose={() => setRejectOpen(false)}
+                  open={rejectOpen}
+                  title="Reject this report?"
+                >
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      disabled={busy}
+                      onClick={() => setRejectOpen(false)}
+                      variant="secondary"
+                    >
+                      Keep report
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      loading={request === 'reject'}
+                      onClick={() => void reject()}
+                      variant="danger"
+                    >
+                      Reject report
+                    </Button>
+                  </div>
+                </Modal>
               </>
             )}
           </div>
