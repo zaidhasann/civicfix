@@ -10,6 +10,7 @@ import { getDatabaseStatus } from './db/mongoose.js';
 import { authRouter } from './routes/auth.js';
 import { complaintsRouter } from './routes/complaints.js';
 import { uploadsRouter } from './routes/uploads.js';
+import { internalRouter } from './routes/internal.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 
 export function createApp(
@@ -30,6 +31,7 @@ export function createApp(
   app.use('/auth', authRouter);
   app.use('/complaints', complaintsRouter);
   app.use('/uploads', uploadsRouter);
+  app.use('/internal', internalRouter);
 
   app.use(createErrorHandler(logger));
 

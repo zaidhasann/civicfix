@@ -133,4 +133,71 @@ describe('complaints', () => {
 
     expect(fetchResponse.status).toBe(404);
   });
+
+  it('rejects AI result persistence without the agent secret', async () => {
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', anonymousAuthorization())
+      .send({ lat: 18.5204, lng: 73.8567 });
+
+    const response = await request(app)
+      .post(`/internal/complaints/${createResponse.body._id}/ai-results`)
+      .send({});
+
+    expect(response.status).toBe(401);
+  });
+
+  it('persists validated AI results and moves the complaint to pending approval', async () => {
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', anonymousAuthorization())
+      .send({ lat: 18.5204, lng: 73.8567, description: 'A pothole is visible.' });
+
+    const response = await request(app)
+      .post(`/internal/complaints/${createResponse.body._id}/ai-results`)
+      .set('X-Agent-Secret', 'test-agent-secret')
+      .send({
+        classification: {
+          issueType: 'pothole',
+          severity: 4,
+          confidence: 0.92,
+          visibleDetails: 'A pothole is visible in the road.',
+          safetyRisk: true,
+        },
+        recipient: {
+          department: 'Pune Municipal Corporation',
+          email: 'roads@pmc.example',
+          ward: 'Citywide',
+          municipality: 'Pune',
+        },
+        draft: {
+          subject: 'Road hazard report',
+          body: 'Please inspect the reported pothole.',
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('pending_approval');
+    expect(response.body.aiClassification).toMatchObject({
+      issueType: 'pothole',
+      confidence: 0.92,
+    });
+    expect(response.body.recipient.department).toBe('Pune Municipal Corporation');
+    expect(response.body.aiDraft.subject).toBe('Road hazard report');
+    expect(response.body.statusHistory.at(-1).status).toBe('pending_approval');
+  });
+
+  it('rejects malformed AI results', async () => {
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', anonymousAuthorization())
+      .send({ lat: 18.5204, lng: 73.8567 });
+
+    const response = await request(app)
+      .post(`/internal/complaints/${createResponse.body._id}/ai-results`)
+      .set('X-Agent-Secret', 'test-agent-secret')
+      .send({ classification: { issueType: 'unknown' } });
+
+    expect(response.status).toBe(400);
+  });
 });

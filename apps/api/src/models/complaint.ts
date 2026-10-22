@@ -10,6 +10,15 @@ export const complaintCategories = [
   'other',
 ] as const;
 export type ComplaintCategory = (typeof complaintCategories)[number];
+export const aiIssueTypes = [
+  'pothole',
+  'streetlight',
+  'garbage',
+  'drainage',
+  'other',
+  'not_an_issue',
+] as const;
+export type AiIssueType = (typeof aiIssueTypes)[number];
 
 export const complaintStatuses = [
   'draft',
@@ -29,6 +38,14 @@ export interface GeoPoint {
 export interface AiDraft {
   subject: string;
   body: string;
+}
+
+export interface AiClassification {
+  issueType: AiIssueType;
+  severity: number;
+  confidence: number;
+  visibleDetails: string;
+  safetyRisk: boolean;
 }
 
 export interface ComplaintRecipient {
@@ -53,6 +70,7 @@ export interface Complaint {
   category: ComplaintCategory;
   severity: number;
   description: string;
+  aiClassification?: AiClassification;
   aiDraft?: AiDraft;
   finalEmail?: string;
   recipient: ComplaintRecipient;
@@ -87,6 +105,17 @@ const aiDraftSchema = new Schema<AiDraft>(
   { _id: false },
 );
 
+const aiClassificationSchema = new Schema<AiClassification>(
+  {
+    issueType: { type: String, enum: aiIssueTypes, required: true },
+    severity: { type: Number, required: true, min: 1, max: 5 },
+    confidence: { type: Number, required: true, min: 0, max: 1 },
+    visibleDetails: { type: String, required: true, trim: true, maxlength: 2000 },
+    safetyRisk: { type: Boolean, required: true },
+  },
+  { _id: false },
+);
+
 const recipientSchema = new Schema<ComplaintRecipient>(
   {
     department: { type: String, required: true, trim: true },
@@ -116,6 +145,7 @@ const complaintSchema = new Schema<Complaint>(
     category: { type: String, enum: complaintCategories, required: true, index: true },
     severity: { type: Number, required: true, min: 1, max: 5, index: true },
     description: { type: String, required: true, trim: true, maxlength: 5000 },
+    aiClassification: { type: aiClassificationSchema },
     aiDraft: { type: aiDraftSchema },
     finalEmail: { type: String, trim: true },
     recipient: { type: recipientSchema, required: true },

@@ -6,3 +6,4 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-that-is-at-least-32-charac
 process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
 process.env.CLOUDINARY_API_KEY = 'test-api-key';
 process.env.CLOUDINARY_API_SECRET = 'test-cloudinary-secret';
+process.env.AGENT_SHARED_SECRET = 'test-agent-secret';
