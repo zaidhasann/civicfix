@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.2",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -19,22 +20,23 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
+    "nodemailer": "^10.2.1",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
-    "@types/cookie-parser": "^1.4.8",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "latest",
+    "@types/supertest": "^6.0.3",
+    "mongodb-memory-server": "^10.4.3",
+    "supertest": "^7.1.4",
     "tsx": "^4.19.3",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "supertest": "^7.1.4",
-    "@types/supertest": "^6.0.3",
-    "mongodb-memory-server": "^10.4.3"
+    "vitest": "^3.2.4"
   }
 }

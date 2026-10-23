@@ -62,6 +62,7 @@ export interface ComplaintStatusHistoryEntry {
 }
 
 export interface Complaint {
+  id: string;
   reporter?: Types.ObjectId;
   anonymousId?: string;
   photoUrl?: string;

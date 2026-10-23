@@ -8,10 +8,11 @@ import type { Logger } from 'pino';
 import { env } from './config/env.js';
 import { getDatabaseStatus } from './db/mongoose.js';
 import { authRouter } from './routes/auth.js';
-import { complaintsRouter } from './routes/complaints.js';
+import { createComplaintsRouter } from './routes/complaints.js';
 import { uploadsRouter } from './routes/uploads.js';
 import { internalRouter } from './routes/internal.js';
 import { createErrorHandler } from './middleware/error-handler.js';
+import { createEmailService } from './services/email.js';
 
 export function createApp(
   logger: Logger = pino({ level: env.NODE_ENV === 'development' ? 'debug' : 'info' }),
@@ -29,7 +30,7 @@ export function createApp(
   });
 
   app.use('/auth', authRouter);
-  app.use('/complaints', complaintsRouter);
+  app.use('/complaints', createComplaintsRouter(createEmailService(logger)));
   app.use('/uploads', uploadsRouter);
   app.use('/internal', internalRouter);
 

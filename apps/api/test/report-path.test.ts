@@ -10,7 +10,23 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { connectToDatabase, disconnectFromDatabase } from '../src/db/mongoose.js';
 
-const app = createApp(pino({ level: 'silent' }));
+const dryRunEmails: Array<{ complaintId: string; mode: string }> = [];
+const app = createApp(
+  pino(
+    { level: 'info' },
+    {
+      write(line: string) {
+        const record = JSON.parse(line) as {
+          msg?: string;
+          email?: { complaintId: string; mode: string };
+        };
+        if (record.msg === 'Email send (dry-run)' && record.email) {
+          dryRunEmails.push(record.email);
+        }
+      },
+    },
+  ),
+);
 let mongoServer: MongoMemoryServer;
 
 async function registerUser(email = `${randomUUID()}@example.com`) {
@@ -65,7 +81,6 @@ describe('upload signing', () => {
       api_key: 'test-api-key',
       cloud_name: 'test-cloud',
       folder: 'complaints/',
-      max_file_size: '10485760',
     });
     expect(response.body.signature).toMatch(/^[a-f0-9]{40}$/);
   });
@@ -250,6 +265,7 @@ describe('complaints', () => {
   });
 
   it('approves the edited draft and records approval metadata', async () => {
+    dryRunEmails.length = 0;
     const authorization = anonymousAuthorization();
     const createResponse = await request(app)
       .post('/complaints')
@@ -295,6 +311,8 @@ describe('complaints', () => {
       status: 'sent',
       note: 'Approved by reporter',
     });
+    expect(dryRunEmails).toHaveLength(1);
+    expect(dryRunEmails[0]).toMatchObject({ complaintId: id, mode: 'dry-run' });
   });
 
   it('returns 409 for invalid approval transitions and blocks other send paths', async () => {
