@@ -44,7 +44,7 @@ export default function ComplaintSentPage() {
     try {
       setError(null);
       const loaded = await apiFetch<Complaint>(`/complaints/${complaintId}`);
-      if (loaded.status !== 'sent') {
+      if (!['sent', 'acknowledged', 'resolved'].includes(loaded.status)) {
         setError('This confirmation is only available after the report has been sent.');
         return;
       }
@@ -185,7 +185,7 @@ export default function ComplaintSentPage() {
                   <div className="mt-8 flex flex-wrap gap-3">
                     <Link
                       className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                      href="/dashboard"
+                      href="/complaints"
                     >
                       Track complaint
                     </Link>

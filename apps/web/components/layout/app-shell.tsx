@@ -38,7 +38,7 @@ const navigationItems: NavigationItem[] = [
     ),
   },
   {
-    href: '/dashboard',
+    href: '/complaints',
     label: 'My Complaints',
     icon: (className) => (
       <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
