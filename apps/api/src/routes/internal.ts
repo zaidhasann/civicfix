@@ -51,8 +51,8 @@ internalRouter.post(
       throw new InternalResultsError(parsed.error.issues[0]?.message ?? 'Invalid AI results');
     }
 
-    const result = await ComplaintModel.findByIdAndUpdate(
-      request.params.id,
+    const result = await ComplaintModel.findOneAndUpdate(
+      { _id: request.params.id, status: 'draft' },
       {
         $set: {
           aiClassification: parsed.data.classification,
@@ -69,7 +69,7 @@ internalRouter.post(
       },
       { new: true, runValidators: true },
     );
-    if (!result) throw new InternalResultsError('Complaint not found', 404);
+    if (!result) throw new InternalResultsError('Complaint is not in a processable draft state', 409);
 
     response.json(result);
   },

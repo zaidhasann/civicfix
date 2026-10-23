@@ -201,7 +201,7 @@ describe('complaints', () => {
     expect(response.status).toBe(400);
   });
 
-  it('allows editing, regenerating, rejecting, and approving a pending complaint', async () => {
+  it('allows editing, regenerating, and rejecting a pending complaint', async () => {
     const authorization = anonymousAuthorization();
     const createResponse = await request(app)
       .post('/complaints')
@@ -247,5 +247,128 @@ describe('complaints', () => {
       .set('Authorization', authorization);
     expect(rejected.status).toBe(200);
     expect(rejected.body.status).toBe('rejected');
+  });
+
+  it('approves the edited draft and records approval metadata', async () => {
+    const authorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', authorization)
+      .send({ lat: 18.5204, lng: 73.8567 });
+    const id = createResponse.body._id;
+
+    await request(app)
+      .post(`/internal/complaints/${id}/ai-results`)
+      .set('X-Agent-Secret', 'test-agent-secret')
+      .send({
+        classification: {
+          issueType: 'pothole',
+          severity: 3,
+          confidence: 0.8,
+          visibleDetails: 'Pothole visible',
+          safetyRisk: false,
+        },
+        recipient: {
+          department: 'PMC',
+          email: 'roads@example.com',
+          ward: 'Citywide',
+          municipality: 'Pune',
+        },
+        draft: { subject: 'Original', body: 'Original body' },
+      });
+
+    await request(app)
+      .patch(`/complaints/${id}/draft`)
+      .set('Authorization', authorization)
+      .send({ subject: 'Edited', body: 'Edited body', recipientEmail: 'new@example.com' });
+
+    const approved = await request(app)
+      .post(`/complaints/${id}/approve`)
+      .set('Authorization', authorization);
+
+    expect(approved.status).toBe(200);
+    expect(approved.body.status).toBe('sent');
+    expect(approved.body.finalEmail).toBe('Edited body');
+    expect(approved.body.approvedAt).toBeTruthy();
+    expect(approved.body.approvedIp).toBeTruthy();
+    expect(approved.body.statusHistory.at(-1)).toMatchObject({
+      status: 'sent',
+      note: 'Approved by reporter',
+    });
+  });
+
+  it('returns 409 for invalid approval transitions and blocks other send paths', async () => {
+    const authorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', authorization)
+      .send({ lat: 18.5204, lng: 73.8567 });
+    const id = createResponse.body._id;
+
+    const approveDraft = await request(app)
+      .post(`/complaints/${id}/approve`)
+      .set('Authorization', authorization);
+    expect(approveDraft.status).toBe(409);
+
+    const rejectDraft = await request(app)
+      .post(`/complaints/${id}/reject`)
+      .set('Authorization', authorization);
+    expect(rejectDraft.status).toBe(409);
+
+    await request(app)
+      .post(`/internal/complaints/${id}/ai-results`)
+      .set('X-Agent-Secret', 'test-agent-secret')
+      .send({
+        classification: {
+          issueType: 'pothole',
+          severity: 3,
+          confidence: 0.8,
+          visibleDetails: 'Pothole visible',
+          safetyRisk: false,
+        },
+        recipient: {
+          department: 'PMC',
+          email: 'roads@example.com',
+          ward: 'Citywide',
+          municipality: 'Pune',
+        },
+        draft: { subject: 'Original', body: 'Original body' },
+      });
+
+    const approved = await request(app)
+      .post(`/complaints/${id}/approve`)
+      .set('Authorization', authorization);
+    expect(approved.status).toBe(200);
+
+    const approveAgain = await request(app)
+      .post(`/complaints/${id}/approve`)
+      .set('Authorization', authorization);
+    expect(approveAgain.status).toBe(409);
+
+    const rejectSent = await request(app)
+      .post(`/complaints/${id}/reject`)
+      .set('Authorization', authorization);
+    expect(rejectSent.status).toBe(409);
+
+    const agentOverwrite = await request(app)
+      .post(`/internal/complaints/${id}/ai-results`)
+      .set('X-Agent-Secret', 'test-agent-secret')
+      .send({
+        classification: {
+          issueType: 'pothole',
+          severity: 3,
+          confidence: 0.8,
+          visibleDetails: 'Pothole visible',
+          safetyRisk: false,
+        },
+        recipient: {
+          department: 'PMC',
+          email: 'roads@example.com',
+          ward: 'Citywide',
+          municipality: 'Pune',
+        },
+        draft: { subject: 'Replacement', body: 'Replacement body' },
+      });
+    expect(agentOverwrite.status).toBe(409);
   });
 });

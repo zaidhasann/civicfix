@@ -26,6 +26,10 @@ class ComplaintError extends Error {
   }
 }
 
+function invalidTransition(message: string): ComplaintError {
+  return new ComplaintError(message, 409);
+}
+
 function ownerFilter(request: Request): { reporter: string } | { anonymousId: string } {
   if (!request.user) throw new ComplaintError('Authentication is required', 401);
   return request.user.kind === 'anonymous'
@@ -137,15 +141,25 @@ complaintsRouter.post('/:id/reject', requireAuth, async (request: Request, respo
   if (!mongoose.isValidObjectId(request.params.id)) {
     throw new ComplaintError('Complaint not found', 404);
   }
+  const owner = ownerFilter(request);
+  const existingComplaint = await ComplaintModel.findOne({
+    _id: request.params.id,
+    ...owner,
+  });
+  if (!existingComplaint) throw new ComplaintError('Complaint not found', 404);
+  if (existingComplaint.status !== 'pending_approval') {
+    throw invalidTransition('Complaint is not awaiting approval');
+  }
+
   const complaint = await ComplaintModel.findOneAndUpdate(
-    { _id: request.params.id, ...ownerFilter(request), status: 'pending_approval' },
+    { _id: request.params.id, ...owner, status: 'pending_approval' },
     {
       $set: { status: 'rejected' },
       $push: { statusHistory: { status: 'rejected', note: 'Rejected by reporter' } },
     },
     { new: true, runValidators: true },
   );
-  if (!complaint) throw new ComplaintError('Complaint not found or not awaiting approval', 404);
+  if (!complaint) throw invalidTransition('Complaint is no longer awaiting approval');
   response.json(complaint);
 });
 
@@ -153,19 +167,39 @@ complaintsRouter.post('/:id/approve', requireAuth, async (request: Request, resp
   if (!mongoose.isValidObjectId(request.params.id)) {
     throw new ComplaintError('Complaint not found', 404);
   }
-  const complaint = await ComplaintModel.findOne({
+  const owner = ownerFilter(request);
+  const existingComplaint = await ComplaintModel.findOne({
     _id: request.params.id,
-    ...ownerFilter(request),
-    status: 'pending_approval',
+    ...owner,
   });
-  if (!complaint) throw new ComplaintError('Complaint not found or not awaiting approval', 404);
-  complaint.status = 'sent';
-  complaint.finalEmail = complaint.aiDraft?.body;
-  complaint.statusHistory.push({
-    status: 'sent',
-    changedAt: new Date(),
-    note: 'Approved by reporter',
-  });
-  await complaint.save();
+  if (!existingComplaint) throw new ComplaintError('Complaint not found', 404);
+  if (existingComplaint.status !== 'pending_approval') {
+    throw invalidTransition('Complaint is not awaiting approval');
+  }
+  if (!existingComplaint.aiDraft) {
+    throw invalidTransition('Complaint has no draft to approve');
+  }
+
+  const approvedAt = new Date();
+  const complaint = await ComplaintModel.findOneAndUpdate(
+    { _id: request.params.id, ...owner, status: 'pending_approval' },
+    {
+      $set: {
+        status: 'sent',
+        finalEmail: existingComplaint.aiDraft.body,
+        approvedAt,
+        approvedIp: request.ip,
+      },
+      $push: {
+        statusHistory: {
+          status: 'sent',
+          changedAt: approvedAt,
+          note: 'Approved by reporter',
+        },
+      },
+    },
+    { new: true, runValidators: true },
+  );
+  if (!complaint) throw invalidTransition('Complaint is no longer awaiting approval');
   response.json(complaint);
 });

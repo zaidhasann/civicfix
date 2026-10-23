@@ -73,6 +73,8 @@ export interface Complaint {
   aiClassification?: AiClassification;
   aiDraft?: AiDraft;
   finalEmail?: string;
+  approvedAt?: Date;
+  approvedIp?: string;
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
   statusHistory: ComplaintStatusHistoryEntry[];
@@ -148,6 +150,8 @@ const complaintSchema = new Schema<Complaint>(
     aiClassification: { type: aiClassificationSchema },
     aiDraft: { type: aiDraftSchema },
     finalEmail: { type: String, trim: true },
+    approvedAt: { type: Date },
+    approvedIp: { type: String, trim: true },
     recipient: { type: recipientSchema, required: true },
     status: {
       type: String,
