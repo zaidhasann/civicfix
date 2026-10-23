@@ -4,12 +4,19 @@ import type { Logger } from 'pino';
 import { env } from '../config/env.js';
 import type { Complaint } from '../models/complaint.js';
 
+export interface ComplaintEmailResult {
+  provider: 'dry-run' | 'smtp' | 'sendgrid';
+  status: 'accepted';
+  messageId: string;
+  sentAt: Date;
+}
+
 export interface ComplaintEmailService {
-  sendApprovedComplaint(complaint: Complaint): Promise<void>;
+  sendApprovedComplaint(complaint: Complaint): Promise<ComplaintEmailResult>;
 }
 
 function replyToForComplaint(complaint: Complaint): string {
-  return `complaint-${complaint.id}@${env.EMAIL_REPLY_TO_DOMAIN}`;
+  return `complaint+${complaint.id}@${env.EMAIL_REPLY_TO_DOMAIN}`;
 }
 
 function buildMessage(complaint: Complaint): SendMailOptions {
@@ -78,10 +85,13 @@ export function createEmailService(logger: Logger): ComplaintEmailService {
     async sendApprovedComplaint(complaint) {
       const message = buildMessage(complaint);
       if (!transporter) {
+        const sentAt = new Date();
+        const messageId = `<${complaint.id}@${env.EMAIL_REPLY_TO_DOMAIN}>`;
         logger.info(
           {
             email: {
               complaintId: complaint.id,
+              messageId,
               to: message.to,
               replyTo: message.replyTo,
               subject: message.subject,
@@ -90,14 +100,19 @@ export function createEmailService(logger: Logger): ComplaintEmailService {
           },
           'Email send (dry-run)',
         );
-        return;
+        return { provider: 'dry-run', status: 'accepted', messageId, sentAt };
       }
 
       let attempt = 0;
       while (true) {
         try {
-          await transporter.sendMail(message);
-          return;
+          const result = await transporter.sendMail(message);
+          return {
+            provider: env.EMAIL_MODE,
+            status: 'accepted',
+            messageId: result.messageId,
+            sentAt: new Date(),
+          };
         } catch (error) {
           if (attempt >= env.EMAIL_MAX_RETRIES) throw error;
           const delay = env.EMAIL_RETRY_BASE_DELAY_MS * 2 ** attempt;

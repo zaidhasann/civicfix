@@ -61,6 +61,14 @@ export interface ComplaintStatusHistoryEntry {
   note?: string;
 }
 
+export interface ComplaintDeliveryEvent {
+  provider: 'dry-run' | 'smtp' | 'sendgrid';
+  status: 'accepted' | 'delivered' | 'bounced' | 'failed';
+  messageId: string;
+  occurredAt: Date;
+  detail?: string;
+}
+
 export interface Complaint {
   id: string;
   reporter?: Types.ObjectId;
@@ -76,6 +84,9 @@ export interface Complaint {
   finalEmail?: string;
   approvedAt?: Date;
   approvedIp?: string;
+  messageId?: string;
+  sentAt?: Date;
+  deliveryEvents: ComplaintDeliveryEvent[];
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
   statusHistory: ComplaintStatusHistoryEntry[];
@@ -138,6 +149,21 @@ const statusHistoryEntrySchema = new Schema<ComplaintStatusHistoryEntry>(
   { _id: false },
 );
 
+const deliveryEventSchema = new Schema<ComplaintDeliveryEvent>(
+  {
+    provider: { type: String, enum: ['dry-run', 'smtp', 'sendgrid'], required: true },
+    status: {
+      type: String,
+      enum: ['accepted', 'delivered', 'bounced', 'failed'],
+      required: true,
+    },
+    messageId: { type: String, required: true, trim: true },
+    occurredAt: { type: Date, required: true, default: Date.now },
+    detail: { type: String, trim: true },
+  },
+  { _id: false },
+);
+
 const complaintSchema = new Schema<Complaint>(
   {
     reporter: { type: Schema.Types.ObjectId, ref: 'User', index: true },
@@ -153,6 +179,9 @@ const complaintSchema = new Schema<Complaint>(
     finalEmail: { type: String, trim: true },
     approvedAt: { type: Date },
     approvedIp: { type: String, trim: true },
+    messageId: { type: String, trim: true },
+    sentAt: { type: Date },
+    deliveryEvents: { type: [deliveryEventSchema], default: [] },
     recipient: { type: recipientSchema, required: true },
     status: {
       type: String,

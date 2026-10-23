@@ -10,7 +10,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { connectToDatabase, disconnectFromDatabase } from '../src/db/mongoose.js';
 
-const dryRunEmails: Array<{ complaintId: string; mode: string }> = [];
+const dryRunEmails: Array<{
+  complaintId: string;
+  mode: string;
+  messageId: string;
+  replyTo: string;
+}> = [];
 const app = createApp(
   pino(
     { level: 'info' },
@@ -18,7 +23,7 @@ const app = createApp(
       write(line: string) {
         const record = JSON.parse(line) as {
           msg?: string;
-          email?: { complaintId: string; mode: string };
+          email?: { complaintId: string; mode: string; messageId: string; replyTo: string };
         };
         if (record.msg === 'Email send (dry-run)' && record.email) {
           dryRunEmails.push(record.email);
@@ -81,6 +86,7 @@ describe('upload signing', () => {
       api_key: 'test-api-key',
       cloud_name: 'test-cloud',
       folder: 'complaints/',
+      max_file_size: '10485760',
     });
     expect(response.body.signature).toMatch(/^[a-f0-9]{40}$/);
   });
@@ -307,12 +313,25 @@ describe('complaints', () => {
     expect(approved.body.finalEmail).toBe('Edited body');
     expect(approved.body.approvedAt).toBeTruthy();
     expect(approved.body.approvedIp).toBeTruthy();
+    expect(approved.body.messageId).toBe(`<${id}@reply.civicfix.local>`);
+    expect(approved.body.sentAt).toBeTruthy();
+    expect(approved.body.deliveryEvents).toHaveLength(1);
+    expect(approved.body.deliveryEvents[0]).toMatchObject({
+      provider: 'dry-run',
+      status: 'accepted',
+      messageId: `<${id}@reply.civicfix.local>`,
+    });
     expect(approved.body.statusHistory.at(-1)).toMatchObject({
       status: 'sent',
-      note: 'Approved by reporter',
+      note: 'Email accepted by dry-run transport',
     });
     expect(dryRunEmails).toHaveLength(1);
-    expect(dryRunEmails[0]).toMatchObject({ complaintId: id, mode: 'dry-run' });
+    expect(dryRunEmails[0]).toMatchObject({
+      complaintId: id,
+      mode: 'dry-run',
+      messageId: `<${id}@reply.civicfix.local>`,
+      replyTo: `complaint+${id}@reply.civicfix.local`,
+    });
   });
 
   it('returns 409 for invalid approval transitions and blocks other send paths', async () => {

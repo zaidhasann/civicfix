@@ -214,8 +214,35 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
         { new: true, runValidators: true },
       );
       if (!complaint) throw invalidTransition('Complaint is no longer awaiting approval');
-      await emailService.sendApprovedComplaint(complaint);
-      response.json(complaint);
+      const emailResult = await emailService.sendApprovedComplaint(complaint);
+      const trackedComplaint = await ComplaintModel.findOneAndUpdate(
+        { _id: complaint._id, status: 'sent', messageId: { $exists: false } },
+        {
+          $set: {
+            messageId: emailResult.messageId,
+            sentAt: emailResult.sentAt,
+          },
+          $push: {
+            deliveryEvents: {
+              provider: emailResult.provider,
+              status: emailResult.status,
+              messageId: emailResult.messageId,
+              occurredAt: emailResult.sentAt,
+              detail: 'Message accepted by email transport',
+            },
+            statusHistory: {
+              status: 'sent',
+              changedAt: emailResult.sentAt,
+              note: `Email accepted by ${emailResult.provider} transport`,
+            },
+          },
+        },
+        { new: true, runValidators: true },
+      );
+      if (!trackedComplaint) {
+        throw new ComplaintError('Complaint delivery tracking could not be saved', 500);
+      }
+      response.json(trackedComplaint);
     },
   );
 
