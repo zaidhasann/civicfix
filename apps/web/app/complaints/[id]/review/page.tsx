@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 
 import { AppShell, PageContainer } from '../../../../components/layout/app-shell';
@@ -37,6 +37,7 @@ function severityVariant(severity: number): BadgeVariant {
 
 export default function ComplaintReviewPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const complaintId = params.id;
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,8 +141,11 @@ export default function ComplaintReviewPage() {
     }
     setRequest('approve');
     try {
-      await apiPost(`/complaints/${complaintId}/approve`);
-      await loadComplaint();
+      const approved = await apiPost<Complaint>(`/complaints/${complaintId}/approve`);
+      if (approved.status !== 'sent') {
+        throw new Error('The report was not confirmed as sent.');
+      }
+      router.replace(`/complaints/${complaintId}/sent`);
     } catch (requestError) {
       setError(
         requestError instanceof ApiError ? requestError.message : 'Could not approve this report.',
