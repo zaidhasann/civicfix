@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.js';
 import { connectToDatabase, disconnectFromDatabase } from '../src/db/mongoose.js';
+import { ComplaintModel } from '../src/models/complaint.js';
 
 const dryRunEmails: Array<{
   complaintId: string;
@@ -86,7 +87,6 @@ describe('upload signing', () => {
       api_key: 'test-api-key',
       cloud_name: 'test-cloud',
       folder: 'complaints/',
-      max_file_size: '10485760',
     });
     expect(response.body.signature).toMatch(/^[a-f0-9]{40}$/);
   });
@@ -99,6 +99,75 @@ describe('upload signing', () => {
 });
 
 describe('complaints', () => {
+  it('lists only the owner complaints with stable cursor pagination and filters', async () => {
+    const authorization = anonymousAuthorization();
+    const otherAuthorization = anonymousAuthorization();
+    const complaintIds: string[] = [];
+
+    for (let index = 0; index < 3; index += 1) {
+      const response = await request(app)
+        .post('/complaints')
+        .set('Authorization', authorization)
+        .send({ lat: 18.52 + index, lng: 73.85 + index, description: `Complaint ${index}` });
+      expect(response.status).toBe(201);
+      complaintIds.push(response.body._id);
+    }
+    const otherComplaint = await request(app)
+      .post('/complaints')
+      .set('Authorization', otherAuthorization)
+      .send({ lat: 20, lng: 75 });
+    expect(otherComplaint.status).toBe(201);
+
+    await ComplaintModel.updateOne(
+      { _id: complaintIds[0] },
+      { $set: { category: 'pothole', status: 'sent', finalEmail: 'private body' } },
+    );
+    await ComplaintModel.updateOne(
+      { _id: complaintIds[1] },
+      { $set: { category: 'water', status: 'pending_approval' } },
+    );
+
+    const firstPage = await request(app)
+      .get('/complaints/mine?limit=2&sort=createdAt_asc')
+      .set('Authorization', authorization);
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.body.items).toHaveLength(2);
+    expect(firstPage.body.nextCursor).toEqual(expect.any(String));
+    expect(firstPage.body.items[0].id).toBe(complaintIds[0]);
+    expect(firstPage.body.items[1].id).toBe(complaintIds[1]);
+    expect(firstPage.body.items[0]).not.toHaveProperty('finalEmail');
+    expect(firstPage.body.items[0]).not.toHaveProperty('aiDraft');
+
+    const secondPage = await request(app)
+      .get(
+        `/complaints/mine?limit=2&sort=createdAt_asc&cursor=${encodeURIComponent(firstPage.body.nextCursor)}`,
+      )
+      .set('Authorization', authorization);
+    expect(secondPage.status).toBe(200);
+    expect(secondPage.body.items).toHaveLength(1);
+    expect(secondPage.body.items[0].id).toBe(complaintIds[2]);
+    expect(secondPage.body.nextCursor).toBeNull();
+
+    const filtered = await request(app)
+      .get('/complaints/mine?status=pending_approval&category=water')
+      .set('Authorization', authorization);
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.items).toHaveLength(1);
+    expect(filtered.body.items[0].id).toBe(complaintIds[1]);
+  });
+
+  it('rejects invalid listing cursors and filters', async () => {
+    const response = await request(app)
+      .get('/complaints/mine?status=invalid&limit=101')
+      .set('Authorization', anonymousAuthorization());
+    expect(response.status).toBe(400);
+
+    const invalidCursor = await request(app)
+      .get('/complaints/mine?cursor=not-a-cursor')
+      .set('Authorization', anonymousAuthorization());
+    expect(invalidCursor.status).toBe(400);
+  });
+
   it('creates a draft with GeoJSON coordinates and returns it to its owner', async () => {
     const authorization = anonymousAuthorization();
     const createResponse = await request(app)

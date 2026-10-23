@@ -125,7 +125,8 @@ The API currently includes:
 
 - `POST /auth/register`, `POST /auth/login`, `POST /auth/anonymous`, and
   `POST /auth/refresh`
-- `POST /complaints`, `GET /complaints/:id`, and complaint draft,
+- `POST /complaints`, `GET /complaints/mine`, `GET /complaints/:id`, and
+  complaint draft,
   regeneration, approval, and rejection endpoints
 - `POST /uploads/sign` for authenticated Cloudinary upload signatures
 - `POST /internal/complaints/:id/ai-results` for authenticated agent results
