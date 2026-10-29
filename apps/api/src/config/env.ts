@@ -16,6 +16,7 @@ const envSchema = z.object({
   EMAIL_MODE: z.enum(['dry-run', 'smtp', 'sendgrid']).default('dry-run'),
   EMAIL_FROM: z.string().email().default('noreply@civicfix.local'),
   EMAIL_REPLY_TO_DOMAIN: z.string().min(1).default('reply.civicfix.local'),
+  INBOUND_EMAIL_WEBHOOK_SECRET: z.string().min(1).default('test-inbound-email-secret'),
   EMAIL_SMTP_HOST: z.string().default(''),
   EMAIL_SMTP_PORT: z.coerce.number().int().positive().default(587),
   EMAIL_SMTP_USER: z.string().default(''),

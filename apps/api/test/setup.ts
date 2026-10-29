@@ -7,3 +7,4 @@ process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
 process.env.CLOUDINARY_API_KEY = 'test-api-key';
 process.env.CLOUDINARY_API_SECRET = 'test-cloudinary-secret';
 process.env.AGENT_SHARED_SECRET = 'test-agent-secret';
+process.env.INBOUND_EMAIL_WEBHOOK_SECRET = 'test-inbound-email-secret';

@@ -87,6 +87,7 @@ describe('upload signing', () => {
       api_key: 'test-api-key',
       cloud_name: 'test-cloud',
       folder: 'complaints/',
+      max_file_size: '10485760',
     });
     expect(response.body.signature).toMatch(/^[a-f0-9]{40}$/);
   });
@@ -222,6 +223,114 @@ describe('complaints', () => {
       .set('Authorization', anonymousAuthorization());
 
     expect(fetchResponse.status).toBe(404);
+  });
+
+  it('allows the owner to acknowledge then resolve a sent complaint', async () => {
+    const authorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', authorization)
+      .send({ lat: 18.52, lng: 73.85 });
+    const id = createResponse.body._id;
+    await ComplaintModel.updateOne({ _id: id }, { $set: { status: 'sent' } });
+
+    const acknowledged = await request(app)
+      .patch(`/complaints/${id}/status`)
+      .set('Authorization', authorization)
+      .send({ status: 'acknowledged' });
+    expect(acknowledged.status).toBe(200);
+    expect(acknowledged.body.status).toBe('acknowledged');
+    expect(acknowledged.body.statusHistory.at(-1)).toMatchObject({
+      status: 'acknowledged',
+      note: 'Marked acknowledged by reporter',
+    });
+
+    const resolved = await request(app)
+      .patch(`/complaints/${id}/status`)
+      .set('Authorization', authorization)
+      .send({ status: 'resolved' });
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.status).toBe('resolved');
+    expect(resolved.body.statusHistory.at(-1)).toMatchObject({
+      status: 'resolved',
+      note: 'Marked resolved by reporter',
+    });
+  });
+
+  it('enforces owner permissions and valid manual status transitions', async () => {
+    const ownerAuthorization = anonymousAuthorization();
+    const otherAuthorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', ownerAuthorization)
+      .send({ lat: 18.52, lng: 73.85 });
+    const id = createResponse.body._id;
+    await ComplaintModel.updateOne({ _id: id }, { $set: { status: 'sent' } });
+
+    const forbidden = await request(app)
+      .patch(`/complaints/${id}/status`)
+      .set('Authorization', otherAuthorization)
+      .send({ status: 'acknowledged' });
+    expect(forbidden.status).toBe(404);
+
+    const invalid = await request(app)
+      .patch(`/complaints/${id}/status`)
+      .set('Authorization', ownerAuthorization)
+      .send({ status: 'resolved' });
+    expect(invalid.status).toBe(409);
+  });
+
+  it('stores inbound replies for owner review without auto-resolving', async () => {
+    const authorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', authorization)
+      .send({ lat: 18.52, lng: 73.85 });
+    const id = createResponse.body._id;
+    await ComplaintModel.updateOne({ _id: id }, { $set: { status: 'sent' } });
+
+    const inbound = await request(app)
+      .post('/internal/inbound-email')
+      .set('X-Inbound-Email-Secret', 'test-inbound-email-secret')
+      .send({
+        to: `complaint+${id}@reply.civicfix.local`,
+        from: 'official@municipality.example',
+        subject: 'We received your report',
+        text: 'Our team will inspect this location.',
+        messageId: '<reply-123@example>',
+      });
+
+    expect(inbound.status).toBe(200);
+    expect(inbound.body).toMatchObject({
+      complaintId: id,
+      needsOwnerReview: true,
+      status: 'sent',
+      inboundReplyCount: 1,
+    });
+    const stored = await ComplaintModel.findById(id).lean();
+    expect(stored?.status).toBe('sent');
+    expect(stored?.needsOwnerReview).toBe(true);
+    expect(stored?.inboundReplies[0]).toMatchObject({
+      from: 'official@municipality.example',
+      subject: 'We received your report',
+    });
+    expect(stored?.statusHistory.at(-1)?.note).toContain('flagged for owner review');
+  });
+
+  it('rejects unauthorized and malformed inbound email webhooks', async () => {
+    const unauthorized = await request(app).post('/internal/inbound-email').send({});
+    expect(unauthorized.status).toBe(401);
+
+    const malformed = await request(app)
+      .post('/internal/inbound-email')
+      .set('X-Inbound-Email-Secret', 'test-inbound-email-secret')
+      .send({
+        to: 'not-a-civicfix-address@example.com',
+        from: 'official@municipality.example',
+        subject: 'Reply',
+        text: 'Body',
+      });
+    expect(malformed.status).toBe(404);
   });
 
   it('rejects AI result persistence without the agent secret', async () => {

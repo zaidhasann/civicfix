@@ -69,6 +69,16 @@ export interface ComplaintDeliveryEvent {
   detail?: string;
 }
 
+export interface ComplaintInboundReply {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+  messageId?: string;
+  receivedAt: Date;
+}
+
 export interface Complaint {
   id: string;
   reporter?: Types.ObjectId;
@@ -87,6 +97,8 @@ export interface Complaint {
   messageId?: string;
   sentAt?: Date;
   deliveryEvents: ComplaintDeliveryEvent[];
+  inboundReplies: ComplaintInboundReply[];
+  needsOwnerReview: boolean;
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
   statusHistory: ComplaintStatusHistoryEntry[];
@@ -164,6 +176,19 @@ const deliveryEventSchema = new Schema<ComplaintDeliveryEvent>(
   { _id: false },
 );
 
+const inboundReplySchema = new Schema<ComplaintInboundReply>(
+  {
+    from: { type: String, required: true, trim: true },
+    to: { type: String, required: true, trim: true, lowercase: true },
+    subject: { type: String, required: true, trim: true, maxlength: 500 },
+    text: { type: String, required: true, trim: true, maxlength: 50000 },
+    html: { type: String, trim: true, maxlength: 100000 },
+    messageId: { type: String, trim: true },
+    receivedAt: { type: Date, required: true, default: Date.now },
+  },
+  { _id: false },
+);
+
 const complaintSchema = new Schema<Complaint>(
   {
     reporter: { type: Schema.Types.ObjectId, ref: 'User', index: true },
@@ -182,6 +207,8 @@ const complaintSchema = new Schema<Complaint>(
     messageId: { type: String, trim: true },
     sentAt: { type: Date },
     deliveryEvents: { type: [deliveryEventSchema], default: [] },
+    inboundReplies: { type: [inboundReplySchema], default: [] },
+    needsOwnerReview: { type: Boolean, default: false, index: true },
     recipient: { type: recipientSchema, required: true },
     status: {
       type: String,
