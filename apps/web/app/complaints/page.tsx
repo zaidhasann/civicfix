@@ -141,13 +141,7 @@ function ComplaintCard({ complaint }: { complaint: ComplaintListItem }) {
   return (
     <Link
       className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-      href={`/complaints/${complaint.id}/${
-        complaint.status === 'sent' ||
-        complaint.status === 'acknowledged' ||
-        complaint.status === 'resolved'
-          ? 'sent'
-          : 'review'
-      }`}
+      href={`/complaints/${complaint.id}`}
     >
       <Card className="h-full transition hover:-translate-y-0.5 hover:shadow-lg">
         <div className="flex gap-4 p-4 sm:p-5">
