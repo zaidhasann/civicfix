@@ -156,8 +156,11 @@ The following parts are placeholders or are not wired end to end yet:
 - **Community map:** the map page is an empty state; map data, filtering, and
   visualization are not implemented.
 - **Profile settings:** account profile management is not implemented.
-- **Municipal follow-up:** acknowledgements, resolution updates, department
-  responses, notifications, and escalation workflows are not implemented.
+- **Municipal follow-up:** the API can suggest an approval-ready follow-up
+  reminder for complaints that remain unacknowledged for the configured
+  interval; it does not auto-send reminders. Department responses,
+  notifications beyond the reminder event, and escalation workflows still need
+  to be implemented.
 - **Production operations:** deployment configuration, migrations/seed data,
   rate limiting, background job infrastructure, and production monitoring still
   need to be added.

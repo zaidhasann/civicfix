@@ -79,6 +79,13 @@ export interface ComplaintInboundReply {
   receivedAt: Date;
 }
 
+export interface ComplaintFollowUpSuggestion {
+  suggestedAt: Date;
+  draftSubject: string;
+  draftBody: string;
+  notificationSentAt: Date;
+}
+
 export interface Complaint {
   id: string;
   reporter?: Types.ObjectId;
@@ -99,6 +106,7 @@ export interface Complaint {
   deliveryEvents: ComplaintDeliveryEvent[];
   inboundReplies: ComplaintInboundReply[];
   needsOwnerReview: boolean;
+  followUpSuggested?: ComplaintFollowUpSuggestion;
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
   statusHistory: ComplaintStatusHistoryEntry[];
@@ -189,6 +197,16 @@ const inboundReplySchema = new Schema<ComplaintInboundReply>(
   { _id: false },
 );
 
+const followUpSuggestionSchema = new Schema<ComplaintFollowUpSuggestion>(
+  {
+    suggestedAt: { type: Date, required: true },
+    draftSubject: { type: String, required: true, trim: true, maxlength: 500 },
+    draftBody: { type: String, required: true, trim: true, maxlength: 20000 },
+    notificationSentAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
 const complaintSchema = new Schema<Complaint>(
   {
     reporter: { type: Schema.Types.ObjectId, ref: 'User', index: true },
@@ -209,6 +227,7 @@ const complaintSchema = new Schema<Complaint>(
     deliveryEvents: { type: [deliveryEventSchema], default: [] },
     inboundReplies: { type: [inboundReplySchema], default: [] },
     needsOwnerReview: { type: Boolean, default: false, index: true },
+    followUpSuggested: { type: followUpSuggestionSchema },
     recipient: { type: recipientSchema, required: true },
     status: {
       type: String,

@@ -5,11 +5,13 @@ import pino from 'pino';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { connectToDatabase, disconnectFromDatabase } from './db/mongoose.js';
+import { startFollowUpScheduler } from './services/follow-up-scheduler.js';
 
 const logger = pino({ level: env.NODE_ENV === 'development' ? 'debug' : 'info' });
 const app = createApp(logger);
 
 let httpServer: Server | undefined;
+const followUpScheduler = startFollowUpScheduler(logger);
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown requested');
@@ -19,6 +21,7 @@ async function shutdown(signal: string): Promise<void> {
     });
   }
   await disconnectFromDatabase();
+  followUpScheduler.stop();
   logger.info('API shutdown complete');
 }
 

@@ -25,6 +25,8 @@ const envSchema = z.object({
   EMAIL_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(3),
   EMAIL_RETRY_BASE_DELAY_MS: z.coerce.number().int().positive().default(250),
   EMAIL_ATTACH_PHOTO: z.coerce.boolean().default(false),
+  FOLLOW_UP_SCHEDULER_CRON: z.string().min(1).default('0 * * * *'),
+  FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().positive().default(14),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

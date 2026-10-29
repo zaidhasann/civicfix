@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { connectToDatabase, disconnectFromDatabase } from '../src/db/mongoose.js';
 import { ComplaintModel } from '../src/models/complaint.js';
+import { runFollowUpScheduler } from '../src/services/follow-up-scheduler.js';
 
 const dryRunEmails: Array<{
   complaintId: string;
@@ -155,6 +156,99 @@ describe('complaints', () => {
     expect(filtered.status).toBe(200);
     expect(filtered.body.items).toHaveLength(1);
     expect(filtered.body.items[0].id).toBe(complaintIds[1]);
+  });
+
+  describe('follow-up reminder scheduler', () => {
+    it('creates one approval-ready reminder and notification after the configured age', async () => {
+      const now = new Date('2026-10-29T12:00:00.000Z');
+      const sentAt = new Date('2026-10-14T11:59:59.000Z');
+      const complaint = await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Pune',
+        category: 'pothole',
+        severity: 3,
+        description: 'Unresolved pothole',
+        finalEmail: 'Original complaint body',
+        recipient: {
+          department: 'Roads Department',
+          email: 'roads@example.com',
+          ward: '1',
+          municipality: 'Pune',
+        },
+        status: 'sent',
+        sentAt,
+      });
+
+      const logger = pino({ level: 'silent' });
+      expect(await runFollowUpScheduler(logger, { now: () => now, afterDays: 14 })).toBe(1);
+
+      const suggested = await ComplaintModel.findById(complaint.id).lean();
+      expect(suggested?.status).toBe('sent');
+      expect(suggested?.followUpSuggested).toMatchObject({
+        suggestedAt: now,
+        notificationSentAt: now,
+        draftSubject: 'Follow-up: Roads Department complaint',
+      });
+      expect(suggested?.followUpSuggested?.draftBody).toContain('following up');
+    });
+
+    it('is idempotent and skips recent or already acknowledged complaints', async () => {
+      const now = new Date('2026-10-29T12:00:00.000Z');
+      const oldSent = await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Pune',
+        category: 'other',
+        severity: 2,
+        description: 'Old complaint',
+        recipient: {
+          department: 'Water Department',
+          email: 'water@example.com',
+          ward: '1',
+          municipality: 'Pune',
+        },
+        status: 'sent',
+        sentAt: new Date('2026-10-01T00:00:00.000Z'),
+      });
+      await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Pune',
+        category: 'other',
+        severity: 2,
+        description: 'Recent complaint',
+        recipient: {
+          department: 'Water Department',
+          email: 'water@example.com',
+          ward: '1',
+          municipality: 'Pune',
+        },
+        status: 'sent',
+        sentAt: new Date('2026-10-20T00:00:00.000Z'),
+      });
+      await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Pune',
+        category: 'other',
+        severity: 2,
+        description: 'Acknowledged complaint',
+        recipient: {
+          department: 'Water Department',
+          email: 'water@example.com',
+          ward: '1',
+          municipality: 'Pune',
+        },
+        status: 'acknowledged',
+        sentAt: new Date('2026-10-01T00:00:00.000Z'),
+      });
+
+      const logger = pino({ level: 'silent' });
+      expect(await runFollowUpScheduler(logger, { now: () => now, afterDays: 14 })).toBe(1);
+      expect(await runFollowUpScheduler(logger, { now: () => now, afterDays: 14 })).toBe(0);
+      expect((await ComplaintModel.findById(oldSent.id).lean())?.followUpSuggested).toBeTruthy();
+    });
   });
 
   it('rejects invalid listing cursors and filters', async () => {
