@@ -27,6 +27,7 @@ const aiResultsSchema = z.object({
     body: z.string().trim().min(1).max(20000),
   }),
 });
+export type AiResults = z.infer<typeof aiResultsSchema>;
 const inboundEmailSchema = z.object({
   to: z.string().trim().email(),
   from: z.string().trim().email(),
@@ -48,6 +49,32 @@ class InternalResultsError extends Error {
 
 export const internalRouter = Router();
 
+export async function persistAiResults(id: string, results: AiResults) {
+  const result = await ComplaintModel.findOneAndUpdate(
+    { _id: id, status: 'draft' },
+    {
+      $set: {
+        aiClassification: results.classification,
+        recipient: results.recipient,
+        aiDraft: results.draft,
+        status: 'pending_approval',
+      },
+      $push: {
+        statusHistory: {
+          status: 'pending_approval',
+          note: 'AI classification, recipient, and draft persisted',
+        },
+      },
+    },
+    { new: true, runValidators: true },
+  );
+
+  if (!result) {
+    throw new InternalResultsError('Complaint is not in a processable draft state', 409);
+  }
+  return result;
+}
+
 function requireInboundEmailSecret(request: Request, response: Response, next: () => void): void {
   const secret = request.header('X-Inbound-Email-Secret');
   if (!secret || secret !== env.INBOUND_EMAIL_WEBHOOK_SECRET) {
@@ -61,7 +88,8 @@ internalRouter.post(
   '/complaints/:id/ai-results',
   requireAgentSecret,
   async (request: Request, response: Response) => {
-    if (!mongoose.isValidObjectId(request.params.id)) {
+    const complaintId = request.params.id;
+    if (typeof complaintId !== 'string' || !mongoose.isValidObjectId(complaintId)) {
       throw new InternalResultsError('Complaint not found', 404);
     }
 
@@ -70,27 +98,7 @@ internalRouter.post(
       throw new InternalResultsError(parsed.error.issues[0]?.message ?? 'Invalid AI results');
     }
 
-    const result = await ComplaintModel.findOneAndUpdate(
-      { _id: request.params.id, status: 'draft' },
-      {
-        $set: {
-          aiClassification: parsed.data.classification,
-          recipient: parsed.data.recipient,
-          aiDraft: parsed.data.draft,
-          status: 'pending_approval',
-        },
-        $push: {
-          statusHistory: {
-            status: 'pending_approval',
-            note: 'AI classification, recipient, and draft persisted',
-          },
-        },
-      },
-      { new: true, runValidators: true },
-    );
-
-    if (!result)
-      throw new InternalResultsError('Complaint is not in a processable draft state', 409);
+    const result = await persistAiResults(complaintId, parsed.data);
 
     response.json(result);
   },

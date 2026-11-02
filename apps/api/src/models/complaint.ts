@@ -29,6 +29,8 @@ export const complaintStatuses = [
   'rejected',
 ] as const;
 export type ComplaintStatus = (typeof complaintStatuses)[number];
+export const processingStates = ['queued', 'processing', 'completed', 'needs_input', 'failed'] as const;
+export type ProcessingState = (typeof processingStates)[number];
 
 export interface GeoPoint {
   type: 'Point';
@@ -111,6 +113,8 @@ export interface Complaint {
   supportedBy: string[];
   isPublic: boolean;
   followUpSuggested?: ComplaintFollowUpSuggestion;
+  processingState: ProcessingState;
+  processingError?: string;
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
   statusHistory: ComplaintStatusHistoryEntry[];
@@ -236,6 +240,14 @@ const complaintSchema = new Schema<Complaint>(
     supportedBy: { type: [String], default: [] },
     isPublic: { type: Boolean, default: false, index: true },
     followUpSuggested: { type: followUpSuggestionSchema },
+    processingState: {
+      type: String,
+      enum: processingStates,
+      required: true,
+      default: 'queued',
+      index: true,
+    },
+    processingError: { type: String, trim: true, maxlength: 2000 },
     recipient: { type: recipientSchema, required: true },
     status: {
       type: String,

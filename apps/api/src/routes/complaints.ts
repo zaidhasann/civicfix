@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { ComplaintModel, complaintCategories, complaintStatuses } from '../models/complaint.js';
 import type { ComplaintEmailService } from '../services/email.js';
+import { processComplaint } from '../services/complaint-processor.js';
 
 const createComplaintSchema = z.object({
   photoUrl: z.string().trim().url().max(2048).optional(),
@@ -313,7 +314,28 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
     });
 
     response.status(201).json({ ...complaint.toObject(), duplicates });
+    void processComplaint(complaint.id).catch(() => undefined);
   });
+
+  complaintsRouter.post(
+    '/:id/process',
+    requireAuth,
+    async (request: Request, response: Response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        throw new ComplaintError('Complaint not found', 404);
+      }
+      const complaint = await ComplaintModel.findOne({
+        _id: request.params.id,
+        ...ownerFilter(request),
+      });
+      if (!complaint) throw new ComplaintError('Complaint not found', 404);
+      if (['processing', 'completed'].includes(complaint.processingState)) {
+        throw new ComplaintError('Complaint is already being processed or completed', 409);
+      }
+      void processComplaint(complaint.id).catch(() => undefined);
+      response.status(202).json(complaint);
+    },
+  );
 
   complaintsRouter.get('/nearby', async (request: Request, response: Response) => {
     const parsed = nearbyQuerySchema.safeParse(request.query);
@@ -356,7 +378,7 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
 
     const complaints = await ComplaintModel.find(filter)
       .select(
-        '_id status category severity address photoUrl recipient.department recipient.municipality recipient.ward createdAt updatedAt sentAt followUpSuggested',
+        '_id status category severity address photoUrl recipient.department recipient.municipality recipient.ward createdAt updatedAt sentAt followUpSuggested processingState processingError',
       )
       .sort(sort === 'createdAt_desc' ? { createdAt: -1, _id: -1 } : { createdAt: 1, _id: 1 })
       .limit(limit + 1)
@@ -388,6 +410,8 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
           complaint.followUpSuggested && !complaint.followUpSuggested.dismissedAt
             ? complaint.followUpSuggested
             : undefined,
+        processingState: complaint.processingState,
+        processingError: complaint.processingError,
       })),
       nextCursor,
     });
@@ -650,6 +674,9 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
       }
       if (!existingComplaint.aiDraft) {
         throw invalidTransition('Complaint has no draft to approve');
+      }
+      if (existingComplaint.recipient.email.endsWith('.invalid')) {
+        throw invalidTransition('A valid recipient email is required before approval');
       }
 
       const approvedAt = new Date();

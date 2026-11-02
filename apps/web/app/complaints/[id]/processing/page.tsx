@@ -13,6 +13,8 @@ type ComplaintStatus =
 
 interface ComplaintResponse {
   status: ComplaintStatus;
+  processingState: 'queued' | 'processing' | 'completed' | 'needs_input' | 'failed';
+  processingError?: string;
 }
 
 const steps = ['Analyzing photo', 'Finding your ward', 'Drafting email'];
@@ -43,8 +45,12 @@ export default function ComplaintProcessingPage() {
     try {
       const complaint = await apiFetch<ComplaintResponse>(`/complaints/${complaintId}`);
       setError(null);
-      if (complaint.status === 'pending_approval') {
+      if (complaint.status === 'pending_approval' || complaint.processingState === 'completed') {
         router.replace(`/complaints/${complaintId}/review`);
+        return true;
+      }
+      if (complaint.processingState === 'failed' || complaint.processingState === 'needs_input') {
+        setError(complaint.processingError ?? 'This report needs your attention before continuing.');
         return true;
       }
       if (complaint.status === 'rejected') {
@@ -142,7 +148,12 @@ export default function ComplaintProcessingPage() {
                   className="mt-4"
                   loading={isRetrying}
                   loadingLabel="Retrying"
-                  onClick={() => void checkStatus()}
+                  onClick={async () => {
+                    if (error && !isRetrying) {
+                      await apiFetch(`/complaints/${complaintId}/process`, { method: 'POST' });
+                      await checkStatus();
+                    }
+                  }}
                   type="button"
                 >
                   Retry
