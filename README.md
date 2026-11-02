@@ -154,8 +154,9 @@ The following parts are placeholders or are not wired end to end yet:
   updates the complaint automatically still needs to be connected.
 - **Report history:** the dashboard shows the signed-in user but does not yet
   list their previous complaints or their status history.
-- **Community map:** the map page is an empty state; map data, filtering, and
-  visualization are not implemented.
+- **Community map:** the Mapbox view is implemented with clustered public
+  issues, category filters, and report links; production token/configuration
+  and moderation workflows remain environment-dependent.
 - **Profile settings:** account profile management is not implemented.
 - **Municipal follow-up:** the API can suggest an approval-ready follow-up
   reminder for complaints that remain unacknowledged for the configured

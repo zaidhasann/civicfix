@@ -1,6 +1,6 @@
 'use client';
 
-import { useReducer, useState } from 'react';
+import { useCallback, useReducer, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ProtectedRoute } from '../../components/auth/protected-route';
@@ -9,6 +9,7 @@ import { PhotoCapture } from '../../components/report/photo-capture';
 import { LocationPicker } from '../../components/report/location-picker';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Modal } from '../../components/ui/modal';
 import { useGeolocation } from '../../hooks/use-geolocation';
 import { apiPost, ApiError } from '../../lib/api';
 import type { PhotoUploadResult } from '../../lib/upload-photo';
@@ -27,6 +28,7 @@ type ReportState = {
   coordinates: { latitude: number; longitude: number } | null;
   title: string;
   description: string;
+  category: 'pothole' | 'streetlight' | 'waste' | 'water' | 'traffic' | 'public-safety' | 'other';
 };
 
 type ReportAction =
@@ -40,7 +42,8 @@ type ReportAction =
       coordinates: { latitude: number; longitude: number } | null;
     }
   | { type: 'set-title'; title: string }
-  | { type: 'set-description'; description: string };
+  | { type: 'set-description'; description: string }
+  | { type: 'set-category'; category: ReportState['category'] };
 
 const initialState: ReportState = {
   step: 0,
@@ -50,6 +53,7 @@ const initialState: ReportState = {
   coordinates: null,
   title: '',
   description: '',
+  category: 'other',
 };
 
 function reportReducer(state: ReportState, action: ReportAction): ReportState {
@@ -70,6 +74,8 @@ function reportReducer(state: ReportState, action: ReportAction): ReportState {
       return { ...state, title: action.title };
     case 'set-description':
       return { ...state, description: action.description };
+    case 'set-category':
+      return { ...state, category: action.category };
   }
 }
 
@@ -149,12 +155,14 @@ function LocationStep({
   currentCoordinates,
   onCoordinatesChange,
   onLocationChange,
+  onUseMyLocation,
   coordinates,
 }: {
   coordinates: { latitude: number; longitude: number } | null;
   currentCoordinates: { latitude: number; longitude: number } | null;
   onCoordinatesChange: (coordinates: { latitude: number; longitude: number } | null) => void;
   onLocationChange: (location: string) => void;
+  onUseMyLocation: () => void;
 }) {
   return (
     <div>
@@ -167,12 +175,7 @@ function LocationStep({
         currentCoordinates={currentCoordinates}
         onAddressChange={onLocationChange}
         onCoordinatesChange={onCoordinatesChange}
-        onUseMyLocation={() => {
-          if (currentCoordinates) {
-            onCoordinatesChange(currentCoordinates);
-            onLocationChange('Current location');
-          }
-        }}
+        onUseMyLocation={onUseMyLocation}
       />
     </div>
   );
@@ -185,6 +188,8 @@ function DetailsStep({
   description,
   onTitleChange,
   onDescriptionChange,
+  category,
+  onCategoryChange,
 }: {
   location: string;
   photoUrl: string | null;
@@ -192,6 +197,8 @@ function DetailsStep({
   description: string;
   onTitleChange: (title: string) => void;
   onDescriptionChange: (description: string) => void;
+  category: ReportState['category'];
+  onCategoryChange: (category: ReportState['category']) => void;
 }) {
   return (
     <div>
@@ -199,6 +206,23 @@ function DetailsStep({
       <p className="mt-2 text-sm leading-6 text-neutral-600">
         A few details will help us understand what needs attention.
       </p>
+      <label className="mt-6 block text-sm font-semibold text-text" htmlFor="report-category">
+        Category
+      </label>
+      <select
+        className="mt-2 min-h-11 w-full rounded-md border border-border bg-surface px-3 text-text"
+        id="report-category"
+        onChange={(event) => onCategoryChange(event.target.value as ReportState['category'])}
+        value={category}
+      >
+        {['pothole', 'streetlight', 'waste', 'water', 'traffic', 'public-safety', 'other'].map(
+          (value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ),
+        )}
+      </select>
       <label className="mt-6 block text-sm font-semibold text-text" htmlFor="report-title">
         Short title
       </label>
@@ -249,9 +273,29 @@ function ReportFlow() {
   const [state, dispatch] = useReducer(reportReducer, initialState);
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [duplicate, setDuplicate] = useState<{
+    id: string;
+    createdId: string;
+    distanceMeters?: number;
+  } | null>(null);
   const router = useRouter();
   const geolocation = useGeolocation();
   const isLastStep = state.step === steps.length - 1;
+  const handleCoordinatesChange = useCallback(
+    (coordinates: { latitude: number; longitude: number } | null) => {
+      dispatch({ type: 'set-coordinates', coordinates });
+    },
+    [],
+  );
+  const handleLocationChange = useCallback((location: string) => {
+    dispatch({ type: 'set-location', location });
+  }, []);
+  const handleUseMyLocation = useCallback(() => {
+    if (geolocation.coords) {
+      handleCoordinatesChange(geolocation.coords);
+      handleLocationChange('Current location');
+    }
+  }, [geolocation.coords, handleCoordinatesChange, handleLocationChange]);
 
   async function submitReport(): Promise<void> {
     if (isSubmitting) return;
@@ -264,14 +308,27 @@ function ReportFlow() {
     setSubmitError('');
     setIsSubmitting(true);
     try {
-      const complaint = await apiPost<{ _id: string; id?: string }>('/complaints', {
+      const complaint = await apiPost<{
+        _id: string;
+        id?: string;
+        duplicates?: Array<{ id: string; distanceMeters?: number }>;
+      }>('/complaints', {
         description: state.title
           ? `${state.title}${state.description ? `\n\n${state.description}` : ''}`
           : state.description || undefined,
         lat: coordinates.latitude,
         lng: coordinates.longitude,
         photoUrl: state.photoUpload?.url,
+        category: state.category,
       });
+      if (complaint.duplicates?.[0]) {
+        setDuplicate({
+          ...complaint.duplicates[0],
+          createdId: complaint.id ?? complaint._id,
+        });
+        setIsSubmitting(false);
+        return;
+      }
       router.replace(`/complaints/${complaint.id ?? complaint._id}/processing`);
     } catch (error) {
       setSubmitError(
@@ -321,10 +378,9 @@ function ReportFlow() {
                     <LocationStep
                       coordinates={state.coordinates ?? geolocation.coords}
                       currentCoordinates={geolocation.coords}
-                      onCoordinatesChange={(coordinates) =>
-                        dispatch({ type: 'set-coordinates', coordinates })
-                      }
-                      onLocationChange={(location) => dispatch({ type: 'set-location', location })}
+                      onCoordinatesChange={handleCoordinatesChange}
+                      onLocationChange={handleLocationChange}
+                      onUseMyLocation={handleUseMyLocation}
                     />
                   ) : null}
                   {state.step === 2 ? (
@@ -337,6 +393,8 @@ function ReportFlow() {
                       onTitleChange={(title) => dispatch({ type: 'set-title', title })}
                       photoUrl={state.photoUpload?.url ?? null}
                       title={state.title}
+                      category={state.category}
+                      onCategoryChange={(category) => dispatch({ type: 'set-category', category })}
                     />
                   ) : null}
                 </CardHeader>
@@ -369,6 +427,36 @@ function ReportFlow() {
                   </Button>
                 </CardContent>
               </Card>
+              <Modal
+                description="A similar issue is already on the community map. You can support it instead of creating another report."
+                onClose={() => setDuplicate(null)}
+                open={duplicate !== null}
+                title="Similar issue reported nearby"
+              >
+                <p className="text-sm text-neutral-600">
+                  Similar issue reported {Math.round(duplicate?.distanceMeters ?? 0)}m away.
+                </p>
+                <div className="mt-5 flex flex-wrap justify-end gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (duplicate)
+                        router.replace(`/complaints/${duplicate.createdId}/processing`);
+                    }}
+                  >
+                    Report anyway
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!duplicate) return;
+                      await apiPost(`/complaints/${duplicate.id}/support`);
+                      router.replace(`/complaints/${duplicate.id}`);
+                    }}
+                  >
+                    Add support
+                  </Button>
+                </div>
+              </Modal>
             </div>
           </div>
         </PageContainer>

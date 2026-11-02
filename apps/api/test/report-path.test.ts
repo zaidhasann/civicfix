@@ -132,6 +132,7 @@ describe('complaints', () => {
       expect(nearby.body.items[0]).not.toHaveProperty('anonymousId');
       expect(nearby.body.items[0]).not.toHaveProperty('recipient');
       expect(nearby.body.items[0].distanceMeters).toBeLessThan(1);
+      expect(nearby.body.items[0].supportCount).toBe(0);
 
       const duplicate = await request(app)
         .post('/complaints')
@@ -189,6 +190,34 @@ describe('complaints', () => {
 
       const invalid = await request(app).get('/complaints/nearby?lat=18.5204&lng=73.8567&radius=0');
       expect(invalid.status).toBe(400);
+    });
+
+    it('allows one support vote per authenticated owner', async () => {
+      const authorization = anonymousAuthorization();
+      const complaint = await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Test',
+        category: 'pothole',
+        severity: 3,
+        description: 'Supportable issue',
+        recipient: {
+          department: 'Test',
+          email: 'test@example.com',
+          ward: '1',
+          municipality: 'Test',
+        },
+        status: 'sent',
+      });
+      const supported = await request(app)
+        .post(`/complaints/${complaint.id}/support`)
+        .set('Authorization', authorization);
+      expect(supported.status).toBe(200);
+      expect(supported.body.supportCount).toBe(1);
+      const duplicate = await request(app)
+        .post(`/complaints/${complaint.id}/support`)
+        .set('Authorization', authorization);
+      expect(duplicate.status).toBe(409);
     });
   });
 

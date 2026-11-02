@@ -107,6 +107,8 @@ export interface Complaint {
   deliveryEvents: ComplaintDeliveryEvent[];
   inboundReplies: ComplaintInboundReply[];
   needsOwnerReview: boolean;
+  supportCount: number;
+  supportedBy: string[];
   followUpSuggested?: ComplaintFollowUpSuggestion;
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
@@ -229,6 +231,8 @@ const complaintSchema = new Schema<Complaint>(
     deliveryEvents: { type: [deliveryEventSchema], default: [] },
     inboundReplies: { type: [inboundReplySchema], default: [] },
     needsOwnerReview: { type: Boolean, default: false, index: true },
+    supportCount: { type: Number, default: 0, min: 0 },
+    supportedBy: { type: [String], default: [] },
     followUpSuggested: { type: followUpSuggestionSchema },
     recipient: { type: recipientSchema, required: true },
     status: {

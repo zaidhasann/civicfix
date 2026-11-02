@@ -13,6 +13,7 @@ const createComplaintSchema = z.object({
   category: z.enum(complaintCategories).default('other'),
   description: z.string().trim().max(5000).optional(),
 });
+
 const nearbyQuerySchema = z.object({
   lat: z.coerce.number().finite().min(-90).max(90),
   lng: z.coerce.number().finite().min(-180).max(180),
@@ -91,6 +92,7 @@ interface PublicComplaint {
   category: string;
   location: { type: 'Point'; coordinates: [number, number] };
   status: string;
+  supportCount: number;
   createdAt: Date;
   distanceMeters?: number;
 }
@@ -103,6 +105,7 @@ function publicComplaintProjection(
     category: complaint.category as string,
     location: complaint.location as PublicComplaint['location'],
     status: complaint.status as string,
+    supportCount: (complaint.supportCount as number | undefined) ?? 0,
     createdAt: complaint.createdAt as Date,
     ...('distanceMeters' in complaint
       ? { distanceMeters: complaint.distanceMeters as number }
@@ -140,6 +143,7 @@ async function findNearbyComplaints(
         category: 1,
         location: 1,
         status: 1,
+        supportCount: 1,
         createdAt: 1,
         distanceMeters: 1,
       },
@@ -151,6 +155,36 @@ async function findNearbyComplaints(
 
 export function createComplaintsRouter(emailService: ComplaintEmailService): Router {
   const complaintsRouter = Router();
+
+  complaintsRouter.post(
+    '/:id/support',
+    requireAuth,
+    async (request: Request, response: Response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        throw new ComplaintError('Complaint not found', 404);
+      }
+      const supporter = request.user?.id;
+      if (!supporter) throw new ComplaintError('Authentication is required', 401);
+      const complaint = await ComplaintModel.findOneAndUpdate(
+        {
+          _id: request.params.id,
+          status: { $in: ['sent', 'acknowledged', 'resolved'] },
+          supportedBy: { $ne: supporter },
+        },
+        { $addToSet: { supportedBy: supporter }, $inc: { supportCount: 1 } },
+        { new: true },
+      ).select('_id supportCount');
+      if (!complaint) {
+        const existing = await ComplaintModel.exists({
+          _id: request.params.id,
+          status: { $in: ['sent', 'acknowledged', 'resolved'] },
+        });
+        if (!existing) throw new ComplaintError('Complaint not found', 404);
+        throw new ComplaintError('You have already supported this issue', 409);
+      }
+      response.json({ complaintId: complaint.id, supportCount: complaint.supportCount });
+    },
+  );
 
   complaintsRouter.post('/', requireAuth, async (request: Request, response: Response) => {
     const parsed = createComplaintSchema.safeParse(request.body);
