@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     logger.info('agent service started')
-    with create_run_service(settings.checkpoint_db) as run_service:
+    with create_run_service(settings.checkpoint_db, settings=settings) as run_service:
         app.state.run_service = run_service
         yield
     logger.info('agent service stopped')
@@ -44,12 +44,12 @@ def get_run_service() -> RunService:
 
 
 @app.get('/health')
-async def health() -> dict[str, str]:
+def health() -> dict[str, str]:
     return {'status': 'ok'}
 
 
 @app.post('/run', dependencies=[Depends(require_run_secret)])
-async def start_run(
+def start_run(
     payload: RunInput,
     service: Annotated[RunService, Depends(get_run_service)],
 ) -> dict[str, str]:
@@ -57,7 +57,7 @@ async def start_run(
 
 
 @app.get('/runs/{run_id}', dependencies=[Depends(require_run_secret)])
-async def get_run(
+def get_run(
     run_id: str,
     service: Annotated[RunService, Depends(get_run_service)],
 ) -> dict[str, object]:
@@ -68,7 +68,7 @@ async def get_run(
 
 
 @app.post('/runs/{run_id}/resume', dependencies=[Depends(require_run_secret)])
-async def resume_run(
+def resume_run(
     run_id: str,
     payload: ApprovalInput,
     service: Annotated[RunService, Depends(get_run_service)],

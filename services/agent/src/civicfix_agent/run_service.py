@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,7 +10,13 @@ from typing import Any
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, ConfigDict, Field
 
+from civicfix_agent.config import Settings
 from civicfix_agent.graph import build_complaint_graph
+from civicfix_agent.geocode import Geocoder, create_geocoder
+from civicfix_agent.vector_store import VectorStore, create_vector_store
+from civicfix_agent.vision import LLMClient, VisionLLMClient
+
+logger = logging.getLogger(__name__)
 
 
 class RunInput(BaseModel):
@@ -29,11 +36,27 @@ class ApprovalInput(BaseModel):
 
 
 class RunService:
-    def __init__(self, checkpointer: SqliteSaver) -> None:
-        self.graph = build_complaint_graph(checkpointer=checkpointer)
+    def __init__(
+        self,
+        checkpointer: SqliteSaver,
+        llm_client: LLMClient | None = None,
+        vector_store: VectorStore | None = None,
+        geocoder: Geocoder | None = None,
+    ) -> None:
+        self.geocoder = geocoder
+        self.graph = build_complaint_graph(
+            checkpointer=checkpointer,
+            llm_client=llm_client,
+            vector_store=vector_store,
+        )
 
     def start(self, payload: RunInput) -> str:
         run_id = str(uuid.uuid4())
+        if payload.geocoded_address is None and self.geocoder is not None:
+            try:
+                payload.geocoded_address = self.geocoder.reverse(*payload.coords)
+            except (OSError, RuntimeError, TimeoutError, ValueError) as error:
+                logger.warning('reverse geocoding failed', extra={'error': str(error)})
         self.graph.invoke(
             payload.model_dump(),
             {'configurable': {'thread_id': run_id}},
@@ -62,12 +85,37 @@ class RunService:
 
 
 @contextmanager
-def create_run_service(database_path: str) -> Iterator[RunService]:
+def create_run_service(
+    database_path: str,
+    *,
+    settings: Settings | None = None,
+    llm_client: LLMClient | None = None,
+    vector_store: VectorStore | None = None,
+    geocoder: Geocoder | None = None,
+) -> Iterator[RunService]:
+    created_clients: list[object] = []
+    if settings is not None:
+        if llm_client is None and settings.llm_api_key:
+            llm_client = VisionLLMClient(settings)
+            created_clients.append(llm_client)
+        if vector_store is None:
+            vector_store = create_vector_store()
+            created_clients.append(vector_store)
+        if geocoder is None:
+            geocoder = create_geocoder(settings)
+            created_clients.append(geocoder)
+
     path = Path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with SqliteSaver.from_conn_string(str(path)) as checkpointer:
-        checkpointer.setup()
-        yield RunService(checkpointer)
+    try:
+        with SqliteSaver.from_conn_string(str(path)) as checkpointer:
+            checkpointer.setup()
+            yield RunService(checkpointer, llm_client, vector_store, geocoder)
+    finally:
+        for client in reversed(created_clients):
+            close = getattr(client, 'close', None)
+            if callable(close):
+                close()
 
 
 def _jsonable(value: Any) -> Any:

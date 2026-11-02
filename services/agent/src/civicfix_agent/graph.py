@@ -13,7 +13,7 @@ from civicfix_agent.guardrails import (
 )
 from civicfix_agent.resolver import LocationResolution
 from civicfix_agent.resolver import resolve_location as resolve_location_with_rag
-from civicfix_agent.vector_store import VectorStore
+from civicfix_agent.vector_store import SearchResult, VectorStore
 from civicfix_agent.vision import LLMClient
 from civicfix_agent.writer import DraftOutput, write_complaint_draft
 
@@ -101,12 +101,22 @@ def route_after_resolution(
     return 'needs_input'
 
 
-def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
+def write_draft(
+    state: ComplaintState,
+    vector_store: VectorStore | None = None,
+) -> dict[str, DraftOutput | str | list[SearchResult]]:
     """Write a validated complaint draft from the current graph state."""
 
     classification = state.get('classification')
     if not classification:
         return {'draft': state['description']}
+    legal_references = state.get('legal_references')
+    if not legal_references and vector_store is not None:
+        legal_references = vector_store.query(
+            classification.issue_type,
+            limit=3,
+            metadata_filter={'doc_type': 'legal_reference'},
+        )
     return {
         'draft': write_complaint_draft(
             issue_type=classification.issue_type,
@@ -124,7 +134,7 @@ def write_draft(state: ComplaintState) -> dict[str, DraftOutput | str]:
             ),
             legal_references=[
                 reference
-                for reference in state.get('legal_references', [])
+                for reference in legal_references or []
                 if hasattr(reference, 'metadata')
             ],
         )
@@ -165,7 +175,7 @@ def build_complaint_graph(
     builder.add_node('classify', lambda state: classify(state, llm_client))
     builder.add_node('guardrails', lambda state: apply_guardrails(state, photo_detector))
     builder.add_node('resolve_location', lambda state: resolve_location(state, vector_store))
-    builder.add_node('write_draft', write_draft)
+    builder.add_node('write_draft', lambda state: write_draft(state, vector_store))
     builder.add_node('needs_input', needs_input)
     builder.add_node('await_approval', await_approval)
     builder.add_edge(START, 'guardrails')
