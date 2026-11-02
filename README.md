@@ -55,6 +55,12 @@ Copy-Item apps/api/.env.example apps/api/.env
 At minimum, configure `MONGODB_URI`, both JWT secrets, the Cloudinary
 credentials, and `AGENT_SHARED_SECRET` in `apps/api/.env`.
 
+For deployments, prefer hosting the web app and API at
+`app.example.com` and `api.example.com` on the same parent domain. If they must
+be on unrelated sites, set `COOKIE_SAME_SITE=none` in production and serve the
+API over HTTPS. `TRUST_PROXY=true` is only needed when the API runs behind a
+trusted reverse proxy.
+
 Set up the agent service:
 
 ```powershell

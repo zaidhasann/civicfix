@@ -2,10 +2,20 @@ import 'dotenv/config';
 
 import { z } from 'zod';
 
-const envSchema = z.object({
+export const booleanEnv = z.preprocess(
+  (value) => (typeof value === 'string' ? value.toLowerCase() : value),
+  z.enum(['true', '1', 'false', '0', '']).default('false').transform((value) => {
+    return value === 'true' || value === '1';
+  }),
+);
+
+const envSchema = z
+  .object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
-  CORS_ORIGIN: z.string().url().default('http://localhost:3000'),
+  CORS_ORIGIN: z.string().min(1).default('http://localhost:3000'),
+  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+  TRUST_PROXY: booleanEnv,
   AGENT_BASE_URL: z.string().url().default('http://localhost:8000'),
   AGENT_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
@@ -26,10 +36,30 @@ const envSchema = z.object({
   SENDGRID_API_KEY: z.string().default(''),
   EMAIL_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(3),
   EMAIL_RETRY_BASE_DELAY_MS: z.coerce.number().int().positive().default(250),
-  EMAIL_ATTACH_PHOTO: z.coerce.boolean().default(false),
+  EMAIL_ATTACH_PHOTO: booleanEnv,
   FOLLOW_UP_SCHEDULER_CRON: z.string().min(1).default('0 * * * *'),
   FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().positive().default(14),
-});
+  })
+  .superRefine((values, context) => {
+    for (const origin of values.CORS_ORIGIN.split(',').map((item) => item.trim())) {
+      try {
+        new URL(origin);
+      } catch {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['CORS_ORIGIN'],
+          message: `Invalid CORS origin: ${origin}`,
+        });
+      }
+    }
+    if (values.COOKIE_SAME_SITE === 'none' && values.NODE_ENV !== 'production') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['COOKIE_SAME_SITE'],
+        message: 'COOKIE_SAME_SITE=none requires NODE_ENV=production',
+      });
+    }
+  });
 
 const parsedEnv = envSchema.safeParse(process.env);
 

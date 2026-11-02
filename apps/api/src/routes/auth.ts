@@ -15,6 +15,12 @@ import { randomUUID } from 'node:crypto';
 
 const refreshCookieName = 'civicfix_refresh_token';
 const refreshCookieMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
+export const refreshCookieOptions = {
+  httpOnly: true,
+  path: '/auth',
+  sameSite: env.COOKIE_SAME_SITE,
+  secure: env.COOKIE_SAME_SITE === 'none' || env.NODE_ENV === 'production',
+} as const;
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -48,12 +54,13 @@ function userResponse(user: UserDocument) {
 
 function setRefreshCookie(response: Response, token: string): void {
   response.cookie(refreshCookieName, token, {
-    httpOnly: true,
     maxAge: refreshCookieMaxAgeMs,
-    path: '/auth',
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
+    ...refreshCookieOptions,
   });
+}
+
+function clearRefreshCookie(response: Response): void {
+  response.clearCookie(refreshCookieName, refreshCookieOptions);
 }
 
 function issueTokens(userId: string): { accessToken: string; refreshToken: string } {
@@ -130,4 +137,9 @@ authRouter.post('/refresh', async (request: Request, response: Response) => {
   const tokens = issueTokens(user.id);
   setRefreshCookie(response, tokens.refreshToken);
   response.json({ accessToken: tokens.accessToken, user: userResponse(user) });
+});
+
+authRouter.post('/logout', (_request: Request, response: Response) => {
+  clearRefreshCookie(response);
+  response.status(204).send();
 });

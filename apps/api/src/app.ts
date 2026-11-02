@@ -20,7 +20,20 @@ export function createApp(
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(cors({ credentials: true, origin: env.CORS_ORIGIN }));
+  app.set('trust proxy', env.TRUST_PROXY ? 1 : false);
+  const allowedOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim());
+  app.use(
+    cors({
+      credentials: true,
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error('Origin is not allowed by CORS'));
+      },
+    }),
+  );
   app.use(express.json());
   app.use(cookieParser());
   app.use(pinoHttp({ logger }));
