@@ -1,0 +1,13 @@
+services:
+  agent:
+    build:
+      context: ./services/agent
+    env_file:
+      - ./services/agent/.env
+    ports:
+      - '8000:8000'
+    volumes:
+      - civicfix-agent-data:/data
+
+volumes:
+  civicfix-agent-data:

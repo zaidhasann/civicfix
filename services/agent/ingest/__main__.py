@@ -8,8 +8,18 @@ from pathlib import Path
 def main() -> int:
     parser = argparse.ArgumentParser(description='Ingest CivicFix documents into a vector store.')
     parser.add_argument('source', choices=['municipalities', 'legal'])
-    parser.add_argument('--path', type=Path, help='Path to a municipality directory JSON file')
-    parser.add_argument('--manifest', type=Path, help='Path to the legal source manifest JSON file')
+    parser.add_argument(
+        '--path',
+        type=Path,
+        default=Path('/app/data/municipalities.json'),
+        help='Path to a municipality directory JSON file',
+    )
+    parser.add_argument(
+        '--manifest',
+        type=Path,
+        default=Path('/app/data/legal_sources.json'),
+        help='Path to the legal source manifest JSON file',
+    )
     parser.add_argument(
         '--source-dir',
         type=Path,
@@ -25,8 +35,6 @@ def main() -> int:
     from civicfix_agent.vector_store import create_vector_store
 
     if args.source == 'legal':
-        if args.manifest is None:
-            parser.error('--manifest is required for legal ingestion')
         count = ingest_legal_sources(create_vector_store(), args.manifest, args.source_dir)
     else:
         count = ingest_municipalities(create_vector_store(), args.path)
