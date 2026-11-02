@@ -10,7 +10,14 @@ const createComplaintSchema = z.object({
   photoUrl: z.string().trim().url().max(2048).optional(),
   lat: z.number().finite().min(-90).max(90),
   lng: z.number().finite().min(-180).max(180),
+  category: z.enum(complaintCategories).default('other'),
   description: z.string().trim().max(5000).optional(),
+});
+const nearbyQuerySchema = z.object({
+  lat: z.coerce.number().finite().min(-90).max(90),
+  lng: z.coerce.number().finite().min(-180).max(180),
+  radius: z.coerce.number().finite().positive().max(10000).default(1000),
+  category: z.enum(complaintCategories).optional(),
 });
 const draftUpdateSchema = z.object({
   subject: z.string().trim().min(1).max(500),
@@ -79,6 +86,69 @@ function decodeCursor(value: string): ComplaintCursor {
   }
 }
 
+interface PublicComplaint {
+  id: string;
+  category: string;
+  location: { type: 'Point'; coordinates: [number, number] };
+  status: string;
+  createdAt: Date;
+  distanceMeters?: number;
+}
+
+function publicComplaintProjection(
+  complaint: Record<string, unknown> & { _id: mongoose.Types.ObjectId },
+): PublicComplaint {
+  return {
+    id: complaint._id.toString(),
+    category: complaint.category as string,
+    location: complaint.location as PublicComplaint['location'],
+    status: complaint.status as string,
+    createdAt: complaint.createdAt as Date,
+    ...('distanceMeters' in complaint
+      ? { distanceMeters: complaint.distanceMeters as number }
+      : {}),
+  };
+}
+
+async function findNearbyComplaints(
+  lng: number,
+  lat: number,
+  radiusMeters: number,
+  category?: string,
+  createdAfter?: Date,
+): Promise<PublicComplaint[]> {
+  const query: Record<string, unknown> = {
+    status: { $in: ['sent', 'acknowledged', 'resolved'] },
+    ...(category ? { category } : {}),
+    ...(createdAfter ? { createdAt: { $gte: createdAfter } } : {}),
+  };
+  const complaints = await ComplaintModel.aggregate<
+    Record<string, unknown> & { _id: mongoose.Types.ObjectId }
+  >([
+    {
+      $geoNear: {
+        near: { type: 'Point', coordinates: [lng, lat] },
+        distanceField: 'distanceMeters',
+        maxDistance: radiusMeters,
+        spherical: true,
+        query,
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        category: 1,
+        location: 1,
+        status: 1,
+        createdAt: 1,
+        distanceMeters: 1,
+      },
+    },
+    { $limit: 100 },
+  ]);
+  return complaints.map(publicComplaintProjection);
+}
+
 export function createComplaintsRouter(emailService: ComplaintEmailService): Router {
   const complaintsRouter = Router();
 
@@ -88,12 +158,19 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
       throw new ComplaintError(parsed.error.issues[0]?.message ?? 'Invalid complaint');
     }
 
-    const { lat, lng, photoUrl, description } = parsed.data;
+    const { category, lat, lng, photoUrl, description } = parsed.data;
+    const duplicates = await findNearbyComplaints(
+      lng,
+      lat,
+      50,
+      category,
+      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    );
     const owner = ownerFilter(request);
     const complaint = await ComplaintModel.create({
       ...owner,
       address: `${lat}, ${lng}`,
-      category: 'other',
+      category,
       description: description ?? 'No description provided',
       location: {
         coordinates: [lng, lat],
@@ -111,7 +188,22 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
       statusHistory: [{ status: 'draft', note: 'Complaint created as a draft' }],
     });
 
-    response.status(201).json(complaint);
+    response.status(201).json({ ...complaint.toObject(), duplicates });
+  });
+
+  complaintsRouter.get('/nearby', async (request: Request, response: Response) => {
+    const parsed = nearbyQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      throw new ComplaintError(parsed.error.issues[0]?.message ?? 'Invalid nearby query');
+    }
+
+    const complaints = await findNearbyComplaints(
+      parsed.data.lng,
+      parsed.data.lat,
+      parsed.data.radius,
+      parsed.data.category,
+    );
+    response.json({ items: complaints });
   });
 
   complaintsRouter.get('/mine', requireAuth, async (request: Request, response: Response) => {

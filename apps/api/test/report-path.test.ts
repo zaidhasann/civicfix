@@ -100,6 +100,98 @@ describe('upload signing', () => {
 });
 
 describe('complaints', () => {
+  describe('nearby complaints and duplicate detection', () => {
+    it('returns anonymized nearby public complaints and flags recent same-category reports', async () => {
+      const ownerAuthorization = anonymousAuthorization();
+      const first = await request(app)
+        .post('/complaints')
+        .set('Authorization', ownerAuthorization)
+        .send({
+          category: 'pothole',
+          lat: 18.5204,
+          lng: 73.8567,
+          description: 'Existing pothole',
+        });
+      expect(first.status).toBe(201);
+      await ComplaintModel.updateOne(
+        { _id: first.body._id },
+        { $set: { status: 'sent', createdAt: new Date('2026-10-20T00:00:00.000Z') } },
+      );
+
+      const nearby = await request(app).get(
+        '/complaints/nearby?lat=18.5204&lng=73.8567&radius=100&category=pothole',
+      );
+      expect(nearby.status).toBe(200);
+      expect(nearby.body.items).toHaveLength(1);
+      expect(nearby.body.items[0]).toMatchObject({
+        id: first.body._id,
+        category: 'pothole',
+        status: 'sent',
+      });
+      expect(nearby.body.items[0]).not.toHaveProperty('reporter');
+      expect(nearby.body.items[0]).not.toHaveProperty('anonymousId');
+      expect(nearby.body.items[0]).not.toHaveProperty('recipient');
+      expect(nearby.body.items[0].distanceMeters).toBeLessThan(1);
+
+      const duplicate = await request(app)
+        .post('/complaints')
+        .set('Authorization', ownerAuthorization)
+        .send({
+          category: 'pothole',
+          lat: 18.5204,
+          lng: 73.8567,
+          description: 'Another pothole',
+        });
+      expect(duplicate.status).toBe(201);
+      expect(duplicate.body.duplicates).toHaveLength(1);
+      expect(duplicate.body.duplicates[0]).not.toHaveProperty('finalEmail');
+    });
+
+    it('keeps nearby results separate from duplicate age and category rules', async () => {
+      const fixtures = [
+        { category: 'water', lat: 18.5204, lng: 73.8567, createdAt: new Date('2026-10-20') },
+        { category: 'traffic', lat: 18.5304, lng: 73.8567, createdAt: new Date('2026-10-20') },
+        { category: 'traffic', lat: 18.5204, lng: 73.8567, createdAt: new Date('2026-09-01') },
+      ];
+      for (const fixture of fixtures) {
+        const complaint = await ComplaintModel.create({
+          anonymousId: randomUUID(),
+          location: { type: 'Point', coordinates: [fixture.lng, fixture.lat] },
+          address: 'Test',
+          category: fixture.category,
+          severity: 3,
+          description: 'Fixture',
+          recipient: {
+            department: 'Test',
+            email: 'test@example.com',
+            ward: '1',
+            municipality: 'Test',
+          },
+          status: 'sent',
+          createdAt: fixture.createdAt,
+        });
+        expect(complaint).toBeTruthy();
+      }
+
+      const response = await request(app).get(
+        '/complaints/nearby?lat=18.5204&lng=73.8567&radius=100&category=traffic',
+      );
+      expect(response.status).toBe(200);
+      expect(response.body.items).toHaveLength(1);
+      expect(response.body.items[0].category).toBe('traffic');
+
+      const newComplaint = await request(app)
+        .post('/complaints')
+        .set('Authorization', anonymousAuthorization())
+        .send({ category: 'traffic', lat: 18.5204, lng: 73.8567 });
+      expect(newComplaint.status).toBe(201);
+      expect(newComplaint.body.duplicates).toHaveLength(0);
+
+      const invalid = await request(app).get('/complaints/nearby?lat=18.5204&lng=73.8567&radius=0');
+      expect(invalid.status).toBe(400);
+    });
+  });
+
   it('lists only the owner complaints with stable cursor pagination and filters', async () => {
     const authorization = anonymousAuthorization();
     const otherAuthorization = anonymousAuthorization();
