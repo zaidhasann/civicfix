@@ -498,6 +498,40 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
     },
   );
 
+  complaintsRouter.patch(
+    '/:id/status',
+    requireAuth,
+    async (request: Request, response: Response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        throw new ComplaintError('Complaint not found', 404);
+      }
+      const parsed = statusUpdateSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ComplaintError(parsed.error.issues[0]?.message ?? 'Invalid status update');
+      }
+      const owner = ownerFilter(request);
+      const complaint = await ComplaintModel.findOne({ _id: request.params.id, ...owner });
+      if (!complaint) throw new ComplaintError('Complaint not found', 404);
+
+      const expectedPreviousStatus =
+        parsed.data.status === 'acknowledged' ? 'sent' : 'acknowledged';
+      if (complaint.status !== expectedPreviousStatus) {
+        throw invalidTransition(
+          `Complaint must be ${expectedPreviousStatus} before it can be marked ${parsed.data.status}`,
+        );
+      }
+
+      complaint.status = parsed.data.status;
+      complaint.statusHistory.push({
+        status: parsed.data.status,
+        changedAt: new Date(),
+        note: `Marked ${parsed.data.status} by reporter`,
+      });
+      await complaint.save();
+      response.json(complaint);
+    },
+  );
+
   complaintsRouter.get('/:id', requireAuth, async (request: Request, response: Response) => {
     if (!mongoose.isValidObjectId(request.params.id)) {
       throw new ComplaintError('Complaint not found', 404);
@@ -507,40 +541,6 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
       _id: request.params.id,
       ...ownerFilter(request),
     });
-
-    complaintsRouter.patch(
-      '/:id/status',
-      requireAuth,
-      async (request: Request, response: Response) => {
-        if (!mongoose.isValidObjectId(request.params.id)) {
-          throw new ComplaintError('Complaint not found', 404);
-        }
-        const parsed = statusUpdateSchema.safeParse(request.body);
-        if (!parsed.success) {
-          throw new ComplaintError(parsed.error.issues[0]?.message ?? 'Invalid status update');
-        }
-        const owner = ownerFilter(request);
-        const complaint = await ComplaintModel.findOne({ _id: request.params.id, ...owner });
-        if (!complaint) throw new ComplaintError('Complaint not found', 404);
-
-        const expectedPreviousStatus =
-          parsed.data.status === 'acknowledged' ? 'sent' : 'acknowledged';
-        if (complaint.status !== expectedPreviousStatus) {
-          throw invalidTransition(
-            `Complaint must be ${expectedPreviousStatus} before it can be marked ${parsed.data.status}`,
-          );
-        }
-
-        complaint.status = parsed.data.status;
-        complaint.statusHistory.push({
-          status: parsed.data.status,
-          changedAt: new Date(),
-          note: `Marked ${parsed.data.status} by reporter`,
-        });
-        await complaint.save();
-        response.json(complaint);
-      },
-    );
     if (!complaint) throw new ComplaintError('Complaint not found', 404);
 
     response.json(complaint);

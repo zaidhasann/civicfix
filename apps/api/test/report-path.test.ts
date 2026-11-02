@@ -628,6 +628,24 @@ describe('complaints', () => {
     expect(invalid.status).toBe(409);
   });
 
+  it('registers the status route before any complaint GET request', async () => {
+    const authorization = anonymousAuthorization();
+    const createResponse = await request(app)
+      .post('/complaints')
+      .set('Authorization', authorization)
+      .send({ lat: 18.52, lng: 73.85 });
+    const id = createResponse.body._id;
+    await ComplaintModel.updateOne({ _id: id }, { $set: { status: 'sent' } });
+
+    const response = await request(app)
+      .patch(`/complaints/${id}/status`)
+      .set('Authorization', authorization)
+      .send({ status: 'acknowledged' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('acknowledged');
+  });
+
   it('stores inbound replies for owner review without auto-resolving', async () => {
     const authorization = anonymousAuthorization();
     const createResponse = await request(app)
