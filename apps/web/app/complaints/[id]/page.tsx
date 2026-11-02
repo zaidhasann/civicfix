@@ -12,6 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { ErrorState } from '../../../components/ui/error-state';
 import { LoadingState } from '../../../components/ui/loading-state';
 import { apiFetch, ApiError } from '../../../lib/api';
+import {
+  FollowUpBanner,
+  type FollowUpSuggestion,
+} from '../../../components/complaints/follow-up-banner';
 
 type ComplaintStatus =
   'draft' | 'pending_approval' | 'sent' | 'acknowledged' | 'resolved' | 'rejected';
@@ -48,6 +52,7 @@ interface Complaint {
   createdAt: string;
   sentAt?: string;
   statusHistory: StatusHistoryEntry[];
+  followUpSuggested?: FollowUpSuggestion;
 }
 
 const statusOrder: ComplaintStatus[] = [
@@ -279,6 +284,14 @@ function ComplaintDetailContent() {
           </CardContent>
         </Card>
       </div>
+
+      {complaint.followUpSuggested && !complaint.followUpSuggested.dismissedAt ? (
+        <FollowUpBanner
+          complaintId={complaintKey}
+          onChanged={() => void loadComplaint()}
+          suggestion={complaint.followUpSuggested}
+        />
+      ) : null}
 
       {isSent ? (
         <Card>

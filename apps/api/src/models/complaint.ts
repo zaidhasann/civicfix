@@ -84,6 +84,7 @@ export interface ComplaintFollowUpSuggestion {
   draftSubject: string;
   draftBody: string;
   notificationSentAt: Date;
+  dismissedAt?: Date;
 }
 
 export interface Complaint {
@@ -203,6 +204,7 @@ const followUpSuggestionSchema = new Schema<ComplaintFollowUpSuggestion>(
     draftSubject: { type: String, required: true, trim: true, maxlength: 500 },
     draftBody: { type: String, required: true, trim: true, maxlength: 20000 },
     notificationSentAt: { type: Date, required: true },
+    dismissedAt: { type: Date },
   },
   { _id: false },
 );

@@ -88,7 +88,6 @@ describe('upload signing', () => {
       api_key: 'test-api-key',
       cloud_name: 'test-cloud',
       folder: 'complaints/',
-      max_file_size: '10485760',
     });
     expect(response.body.signature).toMatch(/^[a-f0-9]{40}$/);
   });
@@ -248,6 +247,75 @@ describe('complaints', () => {
       expect(await runFollowUpScheduler(logger, { now: () => now, afterDays: 14 })).toBe(1);
       expect(await runFollowUpScheduler(logger, { now: () => now, afterDays: 14 })).toBe(0);
       expect((await ComplaintModel.findById(oldSent.id).lean())?.followUpSuggested).toBeTruthy();
+    });
+
+    it('persists edits and dismissals, and prepares follow-ups for the existing approval gate', async () => {
+      const authorization = anonymousAuthorization();
+      const created = await request(app)
+        .post('/complaints')
+        .set('Authorization', authorization)
+        .send({ lat: 18.5204, lng: 73.8567, description: 'Follow-up workflow' });
+      expect(created.status).toBe(201);
+      const complaint = await ComplaintModel.findByIdAndUpdate(
+        created.body._id,
+        {
+          $set: {
+            status: 'sent',
+            sentAt: new Date('2026-10-01T00:00:00.000Z'),
+            followUpSuggested: {
+              suggestedAt: new Date('2026-10-20T00:00:00.000Z'),
+              draftSubject: 'Initial follow-up',
+              draftBody: 'Initial body',
+              notificationSentAt: new Date('2026-10-20T00:00:00.000Z'),
+            },
+          },
+        },
+        { new: true },
+      );
+      expect(complaint).toBeTruthy();
+
+      const edited = await request(app)
+        .patch(`/complaints/${complaint.id}/follow-up`)
+        .set('Authorization', authorization)
+        .send({ subject: 'Edited follow-up', body: 'Edited body' });
+      expect(edited.status).toBe(200);
+      expect(edited.body.followUpSuggested.draftSubject).toBe('Edited follow-up');
+
+      const prepared = await request(app)
+        .post(`/complaints/${complaint.id}/follow-up/prepare-approval`)
+        .set('Authorization', authorization);
+      expect(prepared.status).toBe(200);
+      expect(prepared.body.status).toBe('pending_approval');
+      expect(prepared.body.aiDraft).toEqual({ subject: 'Edited follow-up', body: 'Edited body' });
+      expect(prepared.body.followUpSuggested.dismissedAt).toBeTruthy();
+
+      const dismissedCreated = await request(app)
+        .post('/complaints')
+        .set('Authorization', authorization)
+        .send({ lat: 18.5204, lng: 73.8567, description: 'Dismissed follow-up' });
+      expect(dismissedCreated.status).toBe(201);
+      const dismissed = await ComplaintModel.findByIdAndUpdate(
+        dismissedCreated.body._id,
+        {
+          $set: {
+            status: 'sent',
+            sentAt: new Date('2026-10-01T00:00:00.000Z'),
+            followUpSuggested: {
+              suggestedAt: new Date('2026-10-20T00:00:00.000Z'),
+              draftSubject: 'Dismiss me',
+              draftBody: 'Dismiss me',
+              notificationSentAt: new Date('2026-10-20T00:00:00.000Z'),
+            },
+          },
+        },
+        { new: true },
+      );
+      expect(dismissed).toBeTruthy();
+      const dismissal = await request(app)
+        .post(`/complaints/${dismissed.id}/follow-up/dismiss`)
+        .set('Authorization', authorization);
+      expect(dismissal.status).toBe(200);
+      expect(dismissal.body.followUpSuggested.dismissedAt).toBeTruthy();
     });
   });
 

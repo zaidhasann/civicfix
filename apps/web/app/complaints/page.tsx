@@ -10,6 +10,10 @@ import { Card } from '../../components/ui/card';
 import { EmptyState } from '../../components/ui/empty-state';
 import { ErrorState } from '../../components/ui/error-state';
 import { LoadingState } from '../../components/ui/loading-state';
+import {
+  FollowUpBanner,
+  type FollowUpSuggestion,
+} from '../../components/complaints/follow-up-banner';
 import { apiFetch, ApiError } from '../../lib/api';
 
 type ComplaintStatus =
@@ -29,6 +33,7 @@ interface ComplaintListItem {
   };
   createdAt: string;
   sentAt?: string;
+  followUpSuggested?: FollowUpSuggestion;
 }
 
 interface ComplaintListResponse {
@@ -325,6 +330,16 @@ function ComplaintsContent() {
               />
             ) : (
               <>
+                {items
+                  .filter((complaint) => complaint.followUpSuggested)
+                  .map((complaint) => (
+                    <FollowUpBanner
+                      complaintId={complaint.id}
+                      key={`follow-up-${complaint.id}`}
+                      onChanged={() => void loadComplaints(null, true)}
+                      suggestion={complaint.followUpSuggested!}
+                    />
+                  ))}
                 <div className="grid gap-4 lg:grid-cols-2">
                   {items.map((complaint) => (
                     <ComplaintCard complaint={complaint} key={complaint.id} />

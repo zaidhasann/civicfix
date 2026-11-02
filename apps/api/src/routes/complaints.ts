@@ -27,6 +27,10 @@ const listQuerySchema = z.object({
 const statusUpdateSchema = z.object({
   status: z.enum(['acknowledged', 'resolved']),
 });
+const followUpUpdateSchema = z.object({
+  subject: z.string().trim().min(1).max(500),
+  body: z.string().trim().min(1).max(20000),
+});
 
 class ComplaintError extends Error {
   statusCode: number;
@@ -136,7 +140,7 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
 
     const complaints = await ComplaintModel.find(filter)
       .select(
-        '_id status category severity address photoUrl recipient.department recipient.municipality recipient.ward createdAt updatedAt sentAt',
+        '_id status category severity address photoUrl recipient.department recipient.municipality recipient.ward createdAt updatedAt sentAt followUpSuggested',
       )
       .sort(sort === 'createdAt_desc' ? { createdAt: -1, _id: -1 } : { createdAt: 1, _id: 1 })
       .limit(limit + 1)
@@ -164,10 +168,119 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
         createdAt: complaint.createdAt,
         updatedAt: complaint.updatedAt,
         sentAt: complaint.sentAt,
+        followUpSuggested:
+          complaint.followUpSuggested && !complaint.followUpSuggested.dismissedAt
+            ? complaint.followUpSuggested
+            : undefined,
       })),
       nextCursor,
     });
   });
+
+  complaintsRouter.patch(
+    '/:id/follow-up',
+    requireAuth,
+    async (request: Request, response: Response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        throw new ComplaintError('Complaint not found', 404);
+      }
+      const parsed = followUpUpdateSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ComplaintError(parsed.error.issues[0]?.message ?? 'Invalid follow-up draft');
+      }
+      const complaint = await ComplaintModel.findOneAndUpdate(
+        {
+          _id: request.params.id,
+          ...ownerFilter(request),
+          status: 'sent',
+          followUpSuggested: { $exists: true },
+          'followUpSuggested.dismissedAt': { $exists: false },
+        },
+        {
+          $set: {
+            'followUpSuggested.draftSubject': parsed.data.subject,
+            'followUpSuggested.draftBody': parsed.data.body,
+          },
+        },
+        { new: true, runValidators: true },
+      );
+      if (!complaint) throw new ComplaintError('Follow-up suggestion not found', 404);
+      response.json(complaint);
+    },
+  );
+
+  complaintsRouter.post(
+    '/:id/follow-up/dismiss',
+    requireAuth,
+    async (request: Request, response: Response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        throw new ComplaintError('Complaint not found', 404);
+      }
+      const complaint = await ComplaintModel.findOneAndUpdate(
+        {
+          _id: request.params.id,
+          ...ownerFilter(request),
+          status: 'sent',
+          followUpSuggested: { $exists: true },
+          'followUpSuggested.dismissedAt': { $exists: false },
+        },
+        { $set: { 'followUpSuggested.dismissedAt': new Date() } },
+        { new: true, runValidators: true },
+      );
+      if (!complaint) throw new ComplaintError('Follow-up suggestion not found', 404);
+      response.json(complaint);
+    },
+  );
+
+  complaintsRouter.post(
+    '/:id/follow-up/prepare-approval',
+    requireAuth,
+    async (request: Request, response: Response) => {
+      if (!mongoose.isValidObjectId(request.params.id)) {
+        throw new ComplaintError('Complaint not found', 404);
+      }
+      const complaint = await ComplaintModel.findOneAndUpdate(
+        {
+          _id: request.params.id,
+          ...ownerFilter(request),
+          status: 'sent',
+          followUpSuggested: { $exists: true },
+          'followUpSuggested.dismissedAt': { $exists: false },
+        },
+        [
+          {
+            $set: {
+              aiDraft: {
+                subject: '$followUpSuggested.draftSubject',
+                body: '$followUpSuggested.draftBody',
+              },
+              status: 'pending_approval',
+              'followUpSuggested.dismissedAt': new Date(),
+            },
+          },
+          {
+            $set: {
+              statusHistory: {
+                $concatArrays: [
+                  '$statusHistory',
+                  [
+                    {
+                      status: 'pending_approval',
+                      changedAt: new Date(),
+                      note: 'Follow-up reminder prepared for approval',
+                    },
+                  ],
+                ],
+              },
+            },
+          },
+        ],
+        { new: true, runValidators: true },
+      );
+      if (!complaint) throw new ComplaintError('Follow-up suggestion not found', 404);
+      response.json(complaint);
+    },
+  );
 
   complaintsRouter.get('/:id', requireAuth, async (request: Request, response: Response) => {
     if (!mongoose.isValidObjectId(request.params.id)) {
