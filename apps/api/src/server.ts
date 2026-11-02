@@ -26,11 +26,15 @@ async function shutdown(signal: string): Promise<void> {
 }
 
 async function start(): Promise<void> {
+  try {
+    await connectToDatabase(env.MONGODB_URI, logger);
+  } catch (error: unknown) {
+    logger.fatal({ err: error }, 'MongoDB unavailable; refusing to start API');
+    process.exitCode = 1;
+    return;
+  }
   httpServer = createServer(app).listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'CivicFix API listening');
-  });
-  void connectToDatabase(env.MONGODB_URI, logger).catch((error: unknown) => {
-    logger.error({ err: error }, 'MongoDB unavailable; database-backed routes may fail');
   });
 }
 

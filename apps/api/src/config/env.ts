@@ -39,6 +39,12 @@ const envSchema = z
   EMAIL_ATTACH_PHOTO: booleanEnv,
   FOLLOW_UP_SCHEDULER_CRON: z.string().min(1).default('0 * * * *'),
   FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().positive().default(14),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+  UPLOAD_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+  UPLOAD_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
+  GENERAL_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
+  GENERAL_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   })
   .superRefine((values, context) => {
     for (const origin of values.CORS_ORIGIN.split(',').map((item) => item.trim())) {
