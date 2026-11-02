@@ -1,0 +1,24 @@
+{
+  "common": {
+    "appName": "CivicFix",
+    "report": "Report an issue",
+    "map": "Map",
+    "feed": "Public feed",
+    "myComplaints": "My complaints"
+  },
+  "report": {
+    "title": "Report an issue",
+    "photo": "Add a photo",
+    "location": "Where is the issue?",
+    "details": "Describe the issue",
+    "submit": "Submit report"
+  },
+  "status": {
+    "draft": "Draft",
+    "pendingApproval": "Needs review",
+    "sent": "Sent",
+    "acknowledged": "Acknowledged",
+    "resolved": "Resolved",
+    "rejected": "Rejected"
+  }
+}

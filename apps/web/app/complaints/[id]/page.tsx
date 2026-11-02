@@ -233,7 +233,10 @@ function ComplaintDetailContent() {
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-text">Complaint details</h1>
           <p className="mt-2 break-all font-mono text-xs text-neutral-500">ID: {complaintKey}</p>
         </div>
-        <Badge variant={statusVariant(complaint.status)}>{statusLabel(complaint.status)}</Badge>
+        <Badge variant={statusVariant(complaint.status)}>
+          <span aria-hidden="true">{statusLabel(complaint.status)}</span>
+          <span className="sr-only">Status: {statusLabel(complaint.status)}</span>
+        </Badge>
       </div>
 
       <Card className="overflow-hidden">

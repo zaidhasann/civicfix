@@ -173,7 +173,8 @@ function ComplaintCard({ complaint }: { complaint: ComplaintListItem }) {
                 <h2 className="mt-1 truncate font-semibold text-text">{complaint.address}</h2>
               </div>
               <Badge variant={statusVariant(complaint.status)}>
-                {statusLabel(complaint.status)}
+                <span aria-hidden="true">{statusLabel(complaint.status)}</span>
+                <span className="sr-only">Status: {statusLabel(complaint.status)}</span>
               </Badge>
             </div>
             <p className="mt-2 text-sm text-neutral-600">{complaint.recipient.department}</p>

@@ -14,9 +14,16 @@ export type BadgeVariant = keyof typeof badgeVariants;
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
+  statusText?: string;
 }
 
-export function Badge({ className, variant = 'neutral', ...props }: BadgeProps) {
+export function Badge({
+  children,
+  className,
+  statusText,
+  variant = 'neutral',
+  ...props
+}: BadgeProps) {
   return (
     <span
       className={cn(
@@ -25,6 +32,9 @@ export function Badge({ className, variant = 'neutral', ...props }: BadgeProps) 
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {statusText ? <span className="sr-only">: {statusText}</span> : null}
+    </span>
   );
 }

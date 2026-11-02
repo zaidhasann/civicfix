@@ -278,7 +278,8 @@ function FeedContent() {
                           <div className="flex items-center justify-between gap-2">
                             <Badge variant="info">{item.category}</Badge>
                             <Badge variant={item.status === 'resolved' ? 'success' : 'neutral'}>
-                              {item.status}
+                              <span aria-hidden="true">{item.status}</span>
+                              <span className="sr-only">Status: {item.status}</span>
                             </Badge>
                           </div>
                           <p className="text-sm text-neutral-600">{item.supportCount} supporters</p>
