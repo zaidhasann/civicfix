@@ -129,6 +129,8 @@ The API currently includes:
   `GET /complaints/nearby` with anonymized nearby public issues and duplicate
   detection on new reports, plus complaint draft,
   regeneration, approval, and rejection endpoints
+- `GET /feed` for opt-in, privacy-safe public issues with area, bounding-box,
+  category, and status filters
 - `POST /uploads/sign` for authenticated Cloudinary upload signatures
 - `POST /internal/complaints/:id/ai-results` for authenticated agent results
 - `GET /health`

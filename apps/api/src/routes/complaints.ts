@@ -11,6 +11,7 @@ const createComplaintSchema = z.object({
   lat: z.number().finite().min(-90).max(90),
   lng: z.number().finite().min(-180).max(180),
   category: z.enum(complaintCategories).default('other'),
+  isPublic: z.boolean().default(false),
   description: z.string().trim().max(5000).optional(),
 });
 
@@ -19,6 +20,20 @@ const nearbyQuerySchema = z.object({
   lng: z.coerce.number().finite().min(-180).max(180),
   radius: z.coerce.number().finite().positive().max(10000).default(1000),
   category: z.enum(complaintCategories).optional(),
+});
+const feedQuerySchema = z.object({
+  category: z.enum(complaintCategories).optional(),
+  status: z.enum(['sent', 'acknowledged', 'resolved']).optional(),
+  bbox: z
+    .string()
+    .regex(
+      /^-?(?:\d+(?:\.\d+)?),-?(?:\d+(?:\.\d+)?),-?(?:\d+(?:\.\d+)?),-?(?:\d+(?:\.\d+)?)$/,
+      'bbox must be minLng,minLat,maxLng,maxLat',
+    )
+    .optional(),
+  areaLat: z.coerce.number().finite().min(-90).max(90).optional(),
+  areaLng: z.coerce.number().finite().min(-180).max(180).optional(),
+  areaRadius: z.coerce.number().finite().positive().max(10000).optional(),
 });
 const draftUpdateSchema = z.object({
   subject: z.string().trim().min(1).max(500),
@@ -122,6 +137,7 @@ async function findNearbyComplaints(
 ): Promise<PublicComplaint[]> {
   const query: Record<string, unknown> = {
     status: { $in: ['sent', 'acknowledged', 'resolved'] },
+    isPublic: true,
     ...(category ? { category } : {}),
     ...(createdAfter ? { createdAt: { $gte: createdAfter } } : {}),
   };
@@ -152,6 +168,79 @@ async function findNearbyComplaints(
   ]);
   return complaints.map(publicComplaintProjection);
 }
+
+async function getFeed(request: Request, response: Response): Promise<void> {
+  const parsed = feedQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    throw new ComplaintError(parsed.error.issues[0]?.message ?? 'Invalid feed query');
+  }
+
+  const { areaLat, areaLng, areaRadius, bbox, category, status } = parsed.data;
+  if (
+    (areaLat === undefined) !== (areaLng === undefined) ||
+    (areaRadius !== undefined && (areaLat === undefined || areaLng === undefined))
+  ) {
+    throw new ComplaintError('areaLat, areaLng, and areaRadius must be provided together');
+  }
+
+  const query: Record<string, unknown> = {
+    isPublic: true,
+    status: status ? status : { $in: ['sent', 'acknowledged', 'resolved'] },
+    ...(category ? { category } : {}),
+  };
+  if (bbox) {
+    const [minLng, minLat, maxLng, maxLat] = bbox.split(',').map(Number);
+    if (minLng >= maxLng || minLat >= maxLat) {
+      throw new ComplaintError('bbox bounds are invalid');
+    }
+    query.location = {
+      $geoWithin: {
+        $box: [
+          [minLng, minLat],
+          [maxLng, maxLat],
+        ],
+      },
+    };
+  }
+
+  let items;
+  if (areaLat !== undefined && areaLng !== undefined && areaRadius !== undefined) {
+    items = await ComplaintModel.aggregate([
+      {
+        $geoNear: {
+          near: { type: 'Point', coordinates: [areaLng, areaLat] },
+          distanceField: 'distanceMeters',
+          maxDistance: areaRadius,
+          spherical: true,
+          query,
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          category: 1,
+          location: 1,
+          status: 1,
+          supportCount: 1,
+          createdAt: 1,
+          distanceMeters: 1,
+        },
+      },
+      { $limit: 1000 },
+    ]);
+  } else {
+    items = await ComplaintModel.find(query)
+      .select('_id category location status supportCount createdAt')
+      .sort({ createdAt: -1 })
+      .limit(1000)
+      .lean();
+  }
+
+  response.json({ items: items.map((item) => publicComplaintProjection(item)) });
+}
+
+export const publicFeedRouter = Router();
+publicFeedRouter.get('/feed', getFeed);
 
 export function createComplaintsRouter(emailService: ComplaintEmailService): Router {
   const complaintsRouter = Router();
@@ -217,6 +306,7 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
         ward: 'Unassigned',
       },
       ...(photoUrl ? { photoUrl } : {}),
+      isPublic: parsed.data.isPublic,
       severity: 3,
       status: 'draft',
       statusHistory: [{ status: 'draft', note: 'Complaint created as a draft' }],

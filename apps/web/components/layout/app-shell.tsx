@@ -38,6 +38,20 @@ const navigationItems: NavigationItem[] = [
     ),
   },
   {
+    href: '/feed',
+    label: 'Feed',
+    icon: (className) => (
+      <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+        <path
+          d="M5 6h14M5 12h14M5 18h9"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1.8"
+        />
+      </svg>
+    ),
+  },
+  {
     href: '/complaints',
     label: 'My Complaints',
     icon: (className) => (

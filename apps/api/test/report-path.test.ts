@@ -115,7 +115,13 @@ describe('complaints', () => {
       expect(first.status).toBe(201);
       await ComplaintModel.updateOne(
         { _id: first.body._id },
-        { $set: { status: 'sent', createdAt: new Date('2026-10-20T00:00:00.000Z') } },
+        {
+          $set: {
+            status: 'sent',
+            isPublic: true,
+            createdAt: new Date('2026-10-20T00:00:00.000Z'),
+          },
+        },
       );
 
       const nearby = await request(app).get(
@@ -169,6 +175,7 @@ describe('complaints', () => {
             municipality: 'Test',
           },
           status: 'sent',
+          isPublic: true,
           createdAt: fixture.createdAt,
         });
         expect(complaint).toBeTruthy();
@@ -209,6 +216,7 @@ describe('complaints', () => {
         },
         status: 'sent',
       });
+
       const supported = await request(app)
         .post(`/complaints/${complaint.id}/support`)
         .set('Authorization', authorization);
@@ -218,6 +226,63 @@ describe('complaints', () => {
         .post(`/complaints/${complaint.id}/support`)
         .set('Authorization', authorization);
       expect(duplicate.status).toBe(409);
+    });
+
+    it('serves only opted-in complaints through the public feed', async () => {
+      const privateComplaint = await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Private',
+        category: 'water',
+        severity: 3,
+        description: 'Private content',
+        recipient: {
+          department: 'Private',
+          email: 'private@example.com',
+          ward: '1',
+          municipality: 'Test',
+        },
+        status: 'sent',
+        isPublic: false,
+      });
+      const publicComplaint = await ComplaintModel.create({
+        anonymousId: randomUUID(),
+        location: { type: 'Point', coordinates: [73.8567, 18.5204] },
+        address: 'Public',
+        category: 'water',
+        severity: 3,
+        description: 'Public content',
+        recipient: {
+          department: 'Public',
+          email: 'public@example.com',
+          ward: '1',
+          municipality: 'Test',
+        },
+        status: 'sent',
+        isPublic: true,
+      });
+
+      const response = await request(app).get(
+        '/feed?bbox=73.8,18.4,74.0,18.6&category=water&status=sent',
+      );
+      expect(response.status).toBe(200);
+      expect(response.body.items.map((item: { id: string }) => item.id)).toContain(
+        publicComplaint.id,
+      );
+      expect(response.body.items.map((item: { id: string }) => item.id)).not.toContain(
+        privateComplaint.id,
+      );
+      expect(response.body.items[0]).not.toHaveProperty('description');
+      expect(response.body.items[0]).not.toHaveProperty('recipient');
+      expect(response.body.items[0]).not.toHaveProperty('anonymousId');
+
+      const areaResponse = await request(app).get(
+        '/feed?areaLat=18.5204&areaLng=73.8567&areaRadius=1000',
+      );
+      expect(areaResponse.status).toBe(200);
+      expect(areaResponse.body.items.map((item: { id: string }) => item.id)).toContain(
+        publicComplaint.id,
+      );
     });
   });
 

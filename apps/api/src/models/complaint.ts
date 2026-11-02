@@ -109,6 +109,7 @@ export interface Complaint {
   needsOwnerReview: boolean;
   supportCount: number;
   supportedBy: string[];
+  isPublic: boolean;
   followUpSuggested?: ComplaintFollowUpSuggestion;
   recipient: ComplaintRecipient;
   status: ComplaintStatus;
@@ -233,6 +234,7 @@ const complaintSchema = new Schema<Complaint>(
     needsOwnerReview: { type: Boolean, default: false, index: true },
     supportCount: { type: Number, default: 0, min: 0 },
     supportedBy: { type: [String], default: [] },
+    isPublic: { type: Boolean, default: false, index: true },
     followUpSuggested: { type: followUpSuggestionSchema },
     recipient: { type: recipientSchema, required: true },
     status: {

@@ -29,6 +29,7 @@ type ReportState = {
   title: string;
   description: string;
   category: 'pothole' | 'streetlight' | 'waste' | 'water' | 'traffic' | 'public-safety' | 'other';
+  isPublic: boolean;
 };
 
 type ReportAction =
@@ -43,7 +44,8 @@ type ReportAction =
     }
   | { type: 'set-title'; title: string }
   | { type: 'set-description'; description: string }
-  | { type: 'set-category'; category: ReportState['category'] };
+  | { type: 'set-category'; category: ReportState['category'] }
+  | { type: 'set-public'; isPublic: boolean };
 
 const initialState: ReportState = {
   step: 0,
@@ -54,6 +56,7 @@ const initialState: ReportState = {
   title: '',
   description: '',
   category: 'other',
+  isPublic: false,
 };
 
 function reportReducer(state: ReportState, action: ReportAction): ReportState {
@@ -76,6 +79,8 @@ function reportReducer(state: ReportState, action: ReportAction): ReportState {
       return { ...state, description: action.description };
     case 'set-category':
       return { ...state, category: action.category };
+    case 'set-public':
+      return { ...state, isPublic: action.isPublic };
   }
 }
 
@@ -190,6 +195,8 @@ function DetailsStep({
   onDescriptionChange,
   category,
   onCategoryChange,
+  isPublic,
+  onPublicChange,
 }: {
   location: string;
   photoUrl: string | null;
@@ -199,6 +206,8 @@ function DetailsStep({
   onDescriptionChange: (description: string) => void;
   category: ReportState['category'];
   onCategoryChange: (category: ReportState['category']) => void;
+  isPublic: boolean;
+  onPublicChange: (isPublic: boolean) => void;
 }) {
   return (
     <div>
@@ -223,6 +232,21 @@ function DetailsStep({
           ),
         )}
       </select>
+      <label className="mt-5 flex items-start gap-3 text-sm text-text" htmlFor="report-public">
+        <input
+          checked={isPublic}
+          className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          id="report-public"
+          onChange={(event) => onPublicChange(event.target.checked)}
+          type="checkbox"
+        />
+        <span>
+          <span className="font-semibold">Share this issue publicly</span>
+          <span className="mt-1 block text-neutral-600">
+            Your report will appear anonymously in the public issue feed and map.
+          </span>
+        </span>
+      </label>
       <label className="mt-6 block text-sm font-semibold text-text" htmlFor="report-title">
         Short title
       </label>
@@ -320,6 +344,7 @@ function ReportFlow() {
         lng: coordinates.longitude,
         photoUrl: state.photoUpload?.url,
         category: state.category,
+        isPublic: state.isPublic,
       });
       if (complaint.duplicates?.[0]) {
         setDuplicate({
@@ -395,6 +420,8 @@ function ReportFlow() {
                       title={state.title}
                       category={state.category}
                       onCategoryChange={(category) => dispatch({ type: 'set-category', category })}
+                      isPublic={state.isPublic}
+                      onPublicChange={(isPublic) => dispatch({ type: 'set-public', isPublic })}
                     />
                   ) : null}
                 </CardHeader>
