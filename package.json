@@ -7,7 +7,7 @@
     "services/*"
   ],
   "scripts": {
-    "test": "echo \"No tests configured yet\"",
+    "test": "npm test --workspace apps/api && npm test --workspace apps/web && cd services/agent && python -m pytest tests -q",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
