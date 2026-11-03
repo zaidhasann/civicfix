@@ -56,7 +56,10 @@ export function createApp(
   app.use(pinoHttp({ logger }));
   app.use(noSqlInjectionGuard);
 
-  const generalLimiter = createLimiter(env.GENERAL_RATE_LIMIT_MAX, env.GENERAL_RATE_LIMIT_WINDOW_MS);
+  const generalLimiter = createLimiter(
+    env.GENERAL_RATE_LIMIT_MAX,
+    env.GENERAL_RATE_LIMIT_WINDOW_MS,
+  );
   const authLimiter = createLimiter(env.AUTH_RATE_LIMIT_MAX, env.AUTH_RATE_LIMIT_WINDOW_MS);
   const uploadLimiter = createLimiter(env.UPLOAD_RATE_LIMIT_MAX, env.UPLOAD_RATE_LIMIT_WINDOW_MS);
   app.use(generalLimiter);

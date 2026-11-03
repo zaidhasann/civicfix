@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from civicfix_agent.classifier import ClassifierOutput
-from civicfix_agent.run_service import RunInput, RunService, create_run_service
+from civicfix_agent.run_service import RunInput, create_run_service
 from civicfix_agent.vector_store import SearchResult
 
 

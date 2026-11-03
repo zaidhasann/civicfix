@@ -81,9 +81,7 @@ export class AgentClient {
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw new AgentClientError('Agent request timed out');
       }
-      throw new AgentClientError(
-        error instanceof Error ? error.message : 'Agent request failed',
-      );
+      throw new AgentClientError(error instanceof Error ? error.message : 'Agent request failed');
     } finally {
       clearTimeout(timeout);
     }

@@ -11,9 +11,9 @@ afterEach(() => {
 
 describe('AgentClient', () => {
   it('starts a run with agent coordinate and description shapes', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ run_id: 'run-1' }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ run_id: 'run-1' }), { status: 200 }));
     const client = new AgentClient('http://agent.test', 1000, 'secret');
 
     await expect(
@@ -46,8 +46,12 @@ describe('AgentClient', () => {
   it('surfaces unauthorized and server errors', async () => {
     globalThis.fetch = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Unauthorized' }), { status: 401 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Unavailable' }), { status: 503 }));
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: 'Unauthorized' }), { status: 401 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: 'Unavailable' }), { status: 503 }),
+      );
     const client = new AgentClient('http://agent.test');
 
     await expect(client.getRun('one')).rejects.toMatchObject<Partial<AgentClientError>>({
@@ -64,7 +68,9 @@ describe('AgentClient', () => {
     globalThis.fetch = vi.fn().mockImplementation(
       (_input: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
         }),
     );
     const client = new AgentClient('http://agent.test', 10);

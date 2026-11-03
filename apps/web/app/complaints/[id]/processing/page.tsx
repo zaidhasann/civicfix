@@ -50,7 +50,9 @@ export default function ComplaintProcessingPage() {
         return true;
       }
       if (complaint.processingState === 'failed' || complaint.processingState === 'needs_input') {
-        setError(complaint.processingError ?? 'This report needs your attention before continuing.');
+        setError(
+          complaint.processingError ?? 'This report needs your attention before continuing.',
+        );
         return true;
       }
       if (complaint.status === 'rejected') {

@@ -29,7 +29,13 @@ export const complaintStatuses = [
   'rejected',
 ] as const;
 export type ComplaintStatus = (typeof complaintStatuses)[number];
-export const processingStates = ['queued', 'processing', 'completed', 'needs_input', 'failed'] as const;
+export const processingStates = [
+  'queued',
+  'processing',
+  'completed',
+  'needs_input',
+  'failed',
+] as const;
 export type ProcessingState = (typeof processingStates)[number];
 
 export interface GeoPoint {

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import uuid
 import logging
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,8 +11,8 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, ConfigDict, Field
 
 from civicfix_agent.config import Settings
-from civicfix_agent.graph import build_complaint_graph
 from civicfix_agent.geocode import Geocoder, create_geocoder
+from civicfix_agent.graph import build_complaint_graph
 from civicfix_agent.vector_store import VectorStore, create_vector_store
 from civicfix_agent.vision import LLMClient, VisionLLMClient
 
