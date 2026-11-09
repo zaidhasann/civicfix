@@ -1,10 +1,11 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal, NotRequired, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from civicfix_agent.classifier import ClassifierOutput
+from civicfix_agent.contact_discovery import ContactDiscovery
 from civicfix_agent.guardrails import (
     PhotoPrivacyAssessment,
     PhotoPrivacyDetector,
@@ -65,17 +66,18 @@ def classify(
 def resolve_location(
     state: ComplaintState,
     vector_store: VectorStore | None = None,
+    contact_discovery: ContactDiscovery | None = None,
 ) -> dict[str, LocationResolution | str]:
     """Resolve jurisdiction with RAG when a geocoded address and store are available."""
 
     if vector_store and state.get('geocoded_address') and state.get('classification'):
-        return {
-            'jurisdiction': resolve_location_with_rag(
+        resolution = resolve_location_with_rag(
                 state['geocoded_address'] or {},
                 state['classification'].issue_type,
                 vector_store,
+                contact_discovery=contact_discovery,
             )
-        }
+        return {'jurisdiction': resolution}
     return {'jurisdiction': 'unresolved'}
 
 
@@ -99,6 +101,17 @@ def route_after_resolution(
             return 'needs_input'
         return 'write_draft'
     return 'needs_input'
+
+
+def parse_report_date(value: str | None) -> date | None:
+    """Accept YYYY-MM-DD or a full ISO timestamp (with or without a trailing Z)."""
+
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
 
 
 def write_draft(
@@ -127,11 +140,7 @@ def write_draft(
             description=state.get('sanitized_description') or redact_untrusted_description(
                 state['description']
             ),
-            report_date=(
-                date.fromisoformat(report_date)
-                if (report_date := state.get('report_date'))
-                else None
-            ),
+            report_date=parse_report_date(state.get('report_date')),
             legal_references=[
                 reference
                 for reference in legal_references or []
@@ -168,13 +177,17 @@ def build_complaint_graph(
     llm_client: LLMClient | None = None,
     vector_store: VectorStore | None = None,
     photo_detector: PhotoPrivacyDetector | None = None,
+    contact_discovery: ContactDiscovery | None = None,
 ):
     """Build a checkpointed graph that interrupts before human approval."""
 
     builder = StateGraph(ComplaintState)
     builder.add_node('classify', lambda state: classify(state, llm_client))
     builder.add_node('guardrails', lambda state: apply_guardrails(state, photo_detector))
-    builder.add_node('resolve_location', lambda state: resolve_location(state, vector_store))
+    builder.add_node(
+        'resolve_location',
+        lambda state: resolve_location(state, vector_store, contact_discovery),
+    )
     builder.add_node('write_draft', lambda state: write_draft(state, vector_store))
     builder.add_node('needs_input', needs_input)
     builder.add_node('await_approval', await_approval)

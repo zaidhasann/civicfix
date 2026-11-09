@@ -61,6 +61,8 @@ export interface ComplaintRecipient {
   email: string;
   ward: string;
   municipality: string;
+  verificationStatus?: 'verified' | 'unverified' | 'not_found';
+  sourceUrls?: string[];
 }
 
 export interface ComplaintStatusHistoryEntry {
@@ -170,6 +172,12 @@ const recipientSchema = new Schema<ComplaintRecipient>(
     email: { type: String, required: true, lowercase: true, trim: true },
     ward: { type: String, required: true, trim: true },
     municipality: { type: String, required: true, trim: true },
+    verificationStatus: {
+      type: String,
+      enum: ['verified', 'unverified', 'not_found'],
+      default: 'not_found',
+    },
+    sourceUrls: { type: [String], default: [] },
   },
   { _id: false },
 );

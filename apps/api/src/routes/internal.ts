@@ -21,6 +21,8 @@ const aiResultsSchema = z.object({
     email: z.string().trim().email().max(320),
     ward: z.string().trim().min(1).max(200),
     municipality: z.string().trim().min(1).max(200),
+    verificationStatus: z.enum(['verified', 'unverified', 'not_found']).optional(),
+    sourceUrls: z.array(z.string()).optional(),
   }),
   draft: z.object({
     subject: z.string().trim().min(1).max(500),

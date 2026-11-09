@@ -1,8 +1,11 @@
 import { z } from 'zod';
+import pino from 'pino';
 
 import { ComplaintModel, type ComplaintDocument } from '../models/complaint.js';
 import { persistAiResults, type AiResults } from '../routes/internal.js';
 import { AgentClient, agentClient, type AgentRunResponse } from './agent-client.js';
+
+const logger = pino();
 
 const classificationSchema = z.object({
   issue_type: z.enum(['pothole', 'streetlight', 'garbage', 'drainage', 'other', 'not_an_issue']),
@@ -19,6 +22,7 @@ const jurisdictionSchema = z.object({
   confidence: z.number().min(0).max(1),
   sources: z.array(z.string()),
   needs_user_review: z.boolean(),
+  verification_status: z.string().optional(),
 });
 const draftSchema = z.object({
   subject: z.string().min(1).max(500),
@@ -92,6 +96,25 @@ export function mapAgentResult(
     };
   }
 
+  if (jurisdiction.success && jurisdiction.data.needs_user_review && jurisdiction.data.email) {
+    return {
+      kind: 'needs_input',
+      error: 'Please confirm the recipient before sending this report',
+      results: {
+        classification: mappedClassification,
+        recipient: {
+          department: jurisdiction.data.department,
+          email: jurisdiction.data.email,
+          ward: jurisdiction.data.ward,
+          municipality: jurisdiction.data.municipality,
+          verificationStatus: 'unverified',
+          sourceUrls: jurisdiction.data.sources,
+        },
+        draft: fallbackDraft,
+      },
+    };
+  }
+
   if (run.status === 'needs_input') {
     return {
       kind: 'needs_input',
@@ -141,6 +164,10 @@ export async function processComplaint(
       $set: { processingState: mapping.kind === 'needs_input' ? 'needs_input' : 'completed' },
     });
   } catch (error) {
+    logger.error(
+      { err: error, cause: error instanceof Error ? error.cause : undefined, complaintId: id },
+      'Agent processing failed',
+    );
     await markProcessingError(
       id,
       'failed',

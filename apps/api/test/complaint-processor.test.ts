@@ -65,4 +65,28 @@ describe('mapAgentResult', () => {
       expect(result.results.draft.body).toContain('pothole');
     }
   });
+
+  it('keeps a discovered email as an unverified suggestion for review', () => {
+    const result = mapAgentResult(
+      run('needs_input', {
+        municipality: 'Unknown Municipal Corporation',
+        ward: 'Ward 7',
+        department: 'Roads',
+        email: 'roads@unknown.gov.in',
+        confidence: 0.6,
+        sources: ['https://unknown.gov.in/contact'],
+        needs_user_review: true,
+      }),
+      complaint,
+    );
+
+    expect(result.kind).toBe('needs_input');
+    if (result.kind === 'needs_input') {
+      expect(result.results.recipient).toMatchObject({
+        email: 'roads@unknown.gov.in',
+        verificationStatus: 'unverified',
+        sourceUrls: ['https://unknown.gov.in/contact'],
+      });
+    }
+  });
 });
