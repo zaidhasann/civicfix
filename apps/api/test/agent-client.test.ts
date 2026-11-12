@@ -79,4 +79,29 @@ describe('AgentClient', () => {
       message: 'Agent request timed out',
     });
   });
+
+  it('surfaces connection causes and agent error details', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new TypeError('fetch failed'), {
+          cause: { code: 'ECONNREFUSED', address: '::1', port: 8000 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: 'ValueError: boom' }), { status: 502 }),
+      );
+    const client = new AgentClient('http://agent.test');
+
+    const connectionError = await client.getRun('connection').catch((error: unknown) => error);
+    expect(connectionError).toMatchObject({
+      message: expect.stringContaining('ECONNREFUSED'),
+    });
+    expect(connectionError).toMatchObject({
+      message: expect.stringContaining('::1:8000'),
+    });
+    await expect(client.getRun('provider')).rejects.toMatchObject({
+      message: 'ValueError: boom',
+    });
+  });
 });

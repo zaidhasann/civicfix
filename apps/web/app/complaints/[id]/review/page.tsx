@@ -22,6 +22,7 @@ interface Complaint {
     ward: string;
     municipality: string;
   };
+  needsOwnerReview: boolean;
   aiDraft?: {
     subject: string;
     body: string;
@@ -44,7 +45,13 @@ export default function ComplaintReviewPage() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
-  const [initialDraft, setInitialDraft] = useState({ subject: '', body: '', recipientEmail: '' });
+  const [ward, setWard] = useState('');
+  const [initialDraft, setInitialDraft] = useState({
+    subject: '',
+    body: '',
+    recipientEmail: '',
+    ward: '',
+  });
   const [request, setRequest] = useState<'save' | 'regenerate' | 'reject' | 'approve' | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
 
@@ -57,10 +64,12 @@ export default function ComplaintReviewPage() {
         subject: loaded.aiDraft?.subject ?? '',
         body: loaded.aiDraft?.body ?? '',
         recipientEmail: loaded.recipient.email,
+        ward: loaded.recipient.ward,
       };
       setSubject(draft.subject);
       setBody(draft.body);
       setRecipientEmail(draft.recipientEmail);
+      setWard(draft.ward);
       setInitialDraft(draft);
     } catch (requestError) {
       setError(
@@ -74,20 +83,24 @@ export default function ComplaintReviewPage() {
   const dirty =
     subject !== initialDraft.subject ||
     body !== initialDraft.body ||
-    recipientEmail !== initialDraft.recipientEmail;
+    recipientEmail !== initialDraft.recipientEmail ||
+    ward !== initialDraft.ward;
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail);
+  const wardRequired = complaint?.needsOwnerReview || complaint?.recipient.ward === 'Unassigned';
+  const wardValid = ward.trim().length > 0 && ward.trim().toLowerCase() !== 'unassigned';
   const busy = request !== null;
 
   async function saveDraft(): Promise<boolean> {
-    if (!emailValid || !subject.trim() || !body.trim()) return false;
+    if (!emailValid || !subject.trim() || !body.trim() || (wardRequired && !wardValid))
+      return false;
     setRequest('save');
     try {
       const updated = await apiFetch<Complaint>(`/complaints/${complaintId}/draft`, {
         method: 'PATCH',
-        body: JSON.stringify({ subject, body, recipientEmail }),
+        body: JSON.stringify({ subject, body, recipientEmail, ...(wardValid ? { ward } : {}) }),
       });
       setComplaint(updated);
-      setInitialDraft({ subject, body, recipientEmail });
+      setInitialDraft({ subject, body, recipientEmail, ward });
       setError(null);
       return true;
     } catch (requestError) {
@@ -109,6 +122,7 @@ export default function ComplaintReviewPage() {
         subject: updated.aiDraft?.subject ?? '',
         body: updated.aiDraft?.body ?? '',
         recipientEmail: updated.recipient.email,
+        ward: updated.recipient.ward,
       });
       setError(null);
     } catch (requestError) {
@@ -217,6 +231,29 @@ export default function ComplaintReviewPage() {
                   </CardHeader>
                   <CardContent className="space-y-1 text-sm">
                     <p className="font-semibold text-text">{complaint.recipient.department}</p>
+                    {wardRequired ? (
+                      <>
+                        <label
+                          className="block text-sm font-semibold text-text"
+                          htmlFor="recipient-ward"
+                        >
+                          Ward
+                        </label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          id="recipient-ward"
+                          onChange={(event) => setWard(event.target.value)}
+                          placeholder="Enter the ward name or number"
+                          type="text"
+                          value={ward === 'Unassigned' ? '' : ward}
+                        />
+                        {!wardValid ? (
+                          <p className="mt-1 text-xs text-danger">
+                            Enter the ward before approving.
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
                     <label
                       className="block text-sm font-semibold text-text"
                       htmlFor="recipient-email"
@@ -234,7 +271,7 @@ export default function ComplaintReviewPage() {
                       <p className="mt-1 text-xs text-danger">Enter a valid email.</p>
                     )}
                     <p className="text-neutral-600">
-                      {complaint.recipient.municipality} · {complaint.recipient.ward}
+                      {complaint.recipient.municipality} · {ward || complaint.recipient.ward}
                     </p>
                   </CardContent>
                 </Card>
@@ -286,7 +323,7 @@ export default function ComplaintReviewPage() {
 
                 <div className="flex flex-wrap gap-3">
                   <Button
-                    disabled={busy || !dirty || !emailValid}
+                    disabled={busy || !dirty || !emailValid || (wardRequired && !wardValid)}
                     loading={request === 'save'}
                     onClick={() => void saveDraft()}
                   >
@@ -304,7 +341,13 @@ export default function ComplaintReviewPage() {
                     Reject
                   </Button>
                   <Button
-                    disabled={busy || !emailValid || !subject.trim() || !body.trim()}
+                    disabled={
+                      busy ||
+                      !emailValid ||
+                      !subject.trim() ||
+                      !body.trim() ||
+                      (wardRequired && !wardValid)
+                    }
                     loading={request === 'approve'}
                     onClick={() => void approve()}
                   >

@@ -5,6 +5,7 @@ import pino from 'pino';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { connectToDatabase, disconnectFromDatabase } from './db/mongoose.js';
+import { describeFetchError } from './services/agent-client.js';
 import { startFollowUpScheduler } from './services/follow-up-scheduler.js';
 
 const logger = pino({ level: env.NODE_ENV === 'development' ? 'debug' : 'info' });
@@ -35,6 +36,19 @@ async function start(): Promise<void> {
   }
   httpServer = createServer(app).listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'CivicFix API listening');
+    const url = `${env.AGENT_BASE_URL.replace(/\/$/, '')}/health`;
+    logger.info(`Agent URL: ${env.AGENT_BASE_URL}`);
+    void fetch(url, {
+      signal: AbortSignal.timeout(3000),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Agent health check returned HTTP ${response.status}`);
+        }
+      })
+      .catch((error: unknown) => {
+        logger.warn({ error: describeFetchError(error, url) }, 'Agent health check failed');
+      });
   });
 }
 

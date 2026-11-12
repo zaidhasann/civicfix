@@ -4,9 +4,9 @@
 
 :root {
   color-scheme: light;
-  --color-primary: 199 89% 42%;
-  --color-success: 152 58% 38%;
-  --color-warning: 36 92% 48%;
+  --color-primary: 78 100% 38%;
+  --color-success: 145 75% 38%;
+  --color-warning: 38 96% 50%;
   --color-danger: 3 72% 52%;
   --color-neutral-50: 210 40% 98%;
   --color-neutral-100: 210 40% 96%;
@@ -20,13 +20,13 @@
   --color-neutral-900: 222 47% 11%;
   --color-surface: 0 0% 100%;
   --color-text: 222 47% 11%;
-  --color-border: 214 32% 91%;
+  --color-border: 78 24% 86%;
 }
 
 .dark {
   color-scheme: dark;
-  --color-primary: 198 92% 62%;
-  --color-success: 152 60% 54%;
+  --color-primary: 78 100% 60%;
+  --color-success: 145 75% 58%;
   --color-warning: 39 96% 62%;
   --color-danger: 3 86% 68%;
   --color-surface: 222 47% 11%;
@@ -40,6 +40,7 @@
 
 body {
   margin: 0;
+  font-family: 'Neue Montreal', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
 button,

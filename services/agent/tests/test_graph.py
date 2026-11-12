@@ -1,5 +1,7 @@
+from datetime import date
+
 from civicfix_agent.classifier import ClassifierOutput
-from civicfix_agent.graph import build_complaint_graph, run_complaint
+from civicfix_agent.graph import build_complaint_graph, parse_report_date, run_complaint
 from civicfix_agent.guardrails import PhotoPrivacyAssessment
 from civicfix_agent.ingestion import municipality_documents
 from civicfix_agent.resolver import LocationResolution
@@ -68,6 +70,13 @@ class FlaggingPhotoDetector:
         )
 
 
+def test_parse_report_date_accepts_dates_and_timestamps() -> None:
+    assert parse_report_date('2026-11-03') == date(2026, 11, 3)
+    assert parse_report_date('2026-11-03T13:57:14.088Z') == date(2026, 11, 3)
+    assert parse_report_date(None) is None
+    assert parse_report_date('not-a-date') is None
+
+
 def test_graph_routes_low_confidence_to_needs_input() -> None:
     graph = build_complaint_graph()
 
@@ -113,6 +122,28 @@ def test_graph_happy_path_interrupts_before_approval() -> None:
     assert graph.get_state({'configurable': {'thread_id': 'test-happy-path'}}).next == (
         'await_approval',
     )
+
+
+def test_graph_accepts_api_timestamp_report_date() -> None:
+    graph = build_complaint_graph(
+        llm_client=HappyPathClassifier(),
+        vector_store=FakeVectorStore(),
+    )
+
+    state = run_complaint(
+        {
+            'photo_url': 'https://example.com/photo.jpg',
+            'coords': (18.5204, 73.8567),
+            'description': 'A pothole is blocking the lane.',
+            'geocoded_address': {'city': 'Pune', 'suburb': 'Shivajinagar'},
+            'report_date': '2026-11-03T13:57:14.088Z',
+        },
+        thread_id='test-timestamp-report-date',
+        graph=graph,
+    )
+
+    assert isinstance(state['draft'], DraftOutput)
+    assert 'Reported date: 2026-11-03' in state['draft'].body
 
 
 def test_graph_routes_not_an_issue_to_needs_input() -> None:

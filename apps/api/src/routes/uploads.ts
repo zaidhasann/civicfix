@@ -6,7 +6,6 @@ import { requireAuth } from '../middleware/auth.js';
 
 const uploadFolder = 'complaints/';
 const allowedFormats = ['jpg', 'jpeg', 'png', 'webp'] as const;
-const maxFileSize = 10 * 1024 * 1024;
 
 function createCloudinarySignature(parameters: Record<string, string>): string {
   const parameterString = Object.entries(parameters)
@@ -24,7 +23,6 @@ uploadsRouter.post('/sign', requireAuth, (_request: Request, response: Response)
   const signatureParameters = {
     allowed_formats: allowedFormats.join(','),
     folder: uploadFolder,
-    max_file_size: String(maxFileSize),
     timestamp: String(timestamp),
   };
 

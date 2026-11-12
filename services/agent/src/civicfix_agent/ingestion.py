@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, HttpUrl
 
+from civicfix_agent.bijnor_directory import BijnorWardDirectory
 from civicfix_agent.municipalities import load_municipalities
 from civicfix_agent.vector_store import VectorDocument, VectorStore
 
@@ -56,6 +57,8 @@ def municipality_documents(path: Path | None = None) -> list[VectorDocument]:
             'department': municipality.department,
             'doc_type': 'municipality_directory',
             'source_url': str(municipality.source_url),
+            'official_email': str(municipality.official_email) if municipality.official_email else '',
+            'verification_status': municipality.verification_status,
         }
         for chunk_index, chunk in enumerate(chunk_text(text)):
             documents.append(
@@ -63,6 +66,22 @@ def municipality_documents(path: Path | None = None) -> list[VectorDocument]:
                     document_id=f'municipality-{index}-{chunk_index}',
                     text=chunk,
                     metadata=metadata,
+                )
+            )
+    bijnor_path = Path(__file__).resolve().parents[2] / 'data' / 'bijnor_ward_email_directory.csv'
+    if bijnor_path.is_file():
+        bijnor = BijnorWardDirectory(bijnor_path)
+        for index, row in enumerate(bijnor.documents()):
+            text = (
+                f'District: {row["district"]}. City: {row["city"]}. Ward: {row["ward"]}. '
+                f'Municipality type: {row["department"]}. Official email: {row["official_email"]}. '
+                f'State: {row["state"]}.'
+            )
+            documents.append(
+                VectorDocument(
+                    document_id=f'bijnor-ward-{index}',
+                    text=text,
+                    metadata=row,
                 )
             )
     return documents

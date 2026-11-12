@@ -4,7 +4,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 
 from civicfix_agent.config import get_settings
 from civicfix_agent.logging_config import configure_logging
@@ -30,6 +31,18 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title='CivicFix Agent', version='0.1.0', lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def unhandled_error(_: Request, error: Exception) -> JSONResponse:
+    """Return a readable JSON error so the API can show the real cause."""
+
+    logger.exception('agent request failed')
+    http_like = isinstance(error, ValueError | TimeoutError)
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY if http_like else status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={'detail': f'{type(error).__name__}: {error}'[:300]},
+    )
 
 
 def require_run_secret(

@@ -10,7 +10,9 @@ from typing import Any
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, ConfigDict, Field
 
+from civicfix_agent.bijnor_directory import BijnorWardDirectory
 from civicfix_agent.config import Settings
+from civicfix_agent.contact_discovery import ContactDiscovery, TavilyContactDiscovery
 from civicfix_agent.geocode import Geocoder, create_geocoder
 from civicfix_agent.graph import build_complaint_graph
 from civicfix_agent.vector_store import VectorStore, create_vector_store
@@ -42,12 +44,16 @@ class RunService:
         llm_client: LLMClient | None = None,
         vector_store: VectorStore | None = None,
         geocoder: Geocoder | None = None,
+        contact_discovery: ContactDiscovery | None = None,
+        bijnor_directory: BijnorWardDirectory | None = None,
     ) -> None:
         self.geocoder = geocoder
         self.graph = build_complaint_graph(
             checkpointer=checkpointer,
             llm_client=llm_client,
             vector_store=vector_store,
+            contact_discovery=contact_discovery,
+            bijnor_directory=bijnor_directory,
         )
 
     def start(self, payload: RunInput) -> str:
@@ -92,8 +98,12 @@ def create_run_service(
     llm_client: LLMClient | None = None,
     vector_store: VectorStore | None = None,
     geocoder: Geocoder | None = None,
+    contact_discovery: ContactDiscovery | None = None,
+    bijnor_directory: BijnorWardDirectory | None = None,
 ) -> Iterator[RunService]:
     created_clients: list[object] = []
+    if bijnor_directory is None and settings is not None and settings.bijnor_csv_path.is_file():
+        bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
     if settings is not None:
         if llm_client is None and settings.llm_api_key:
             llm_client = VisionLLMClient(settings)
@@ -104,13 +114,25 @@ def create_run_service(
         if geocoder is None:
             geocoder = create_geocoder(settings)
             created_clients.append(geocoder)
-
+        if contact_discovery is None and settings.tavily_api_key:
+            contact_discovery = TavilyContactDiscovery(
+                settings.tavily_api_key,
+                settings.tavily_timeout_seconds,
+            )
+            created_clients.append(contact_discovery)
     path = Path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with SqliteSaver.from_conn_string(str(path)) as checkpointer:
             checkpointer.setup()
-            yield RunService(checkpointer, llm_client, vector_store, geocoder)
+            yield RunService(
+                checkpointer,
+                llm_client,
+                vector_store,
+                geocoder,
+                contact_discovery,
+                bijnor_directory,
+            )
     finally:
         for client in reversed(created_clients):
             close = getattr(client, 'close', None)

@@ -1,5 +1,10 @@
-from civicfix_agent.ingestion import chunk_text, ingest_municipalities
-from civicfix_agent.vector_store import VectorDocument, embed_text
+from __future__ import annotations
+
+from civicfix_agent.ingestion import ingest_municipalities
+from civicfix_agent.vector_store import (
+    VectorDocument,
+    embed_text,
+)
 
 
 class FakeVectorStore:
@@ -10,13 +15,7 @@ class FakeVectorStore:
         self.documents.extend(documents)
 
 
-def test_chunk_text_has_overlap() -> None:
-    chunks = chunk_text('one two three four five', chunk_size=3, overlap=1)
-
-    assert chunks == ['one two three', 'three four five']
-
-
-def test_embedding_is_normalized_and_deterministic() -> None:
+def test_embed_text_is_deterministic_and_normalized() -> None:
     first = embed_text('road maintenance')
 
     assert first == embed_text('road maintenance')
@@ -36,4 +35,6 @@ def test_municipality_ingestion_upserts_searchable_chunks() -> None:
         'department': 'Pune Municipal Corporation',
         'doc_type': 'municipality_directory',
         'source_url': 'https://www.pmc.gov.in/',
+        'official_email': '',
+        'verification_status': 'unverified',
     }

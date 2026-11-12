@@ -40,6 +40,7 @@ const draftUpdateSchema = z.object({
   subject: z.string().trim().min(1).max(500),
   body: z.string().trim().min(1).max(20000),
   recipientEmail: z.string().trim().email().max(320),
+  ward: z.string().trim().min(1).max(200).optional(),
 });
 const listQuerySchema = z.object({
   status: z.enum(complaintStatuses).optional(),
@@ -587,6 +588,7 @@ export function createComplaintsRouter(emailService: ComplaintEmailService): Rou
           $set: {
             aiDraft: { subject: parsed.data.subject, body: parsed.data.body },
             'recipient.email': parsed.data.recipientEmail,
+            ...(parsed.data.ward ? { 'recipient.ward': parsed.data.ward } : {}),
           },
         },
         { new: true, runValidators: true },

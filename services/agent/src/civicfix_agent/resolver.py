@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from civicfix_agent.bijnor_directory import BijnorWardDirectory
 from civicfix_agent.contact_discovery import ContactDiscovery
 from civicfix_agent.vector_store import VectorStore
 
@@ -31,9 +32,35 @@ def resolve_location(
     *,
     confidence_threshold: float = 0.65,
     contact_discovery: ContactDiscovery | None = None,
+    bijnor_directory: BijnorWardDirectory | None = None,
 ) -> LocationResolution:
-    city = _first_value(address, 'city', 'town', 'municipality')
     ward = _first_value(address, 'ward', 'ward_zone', 'suburb') or 'Unknown'
+
+    if bijnor_directory is not None:
+        bijnor_contact = bijnor_directory.lookup(address)
+        if bijnor_contact is not None:
+            return LocationResolution(
+                municipality=bijnor_contact.municipality,
+                ward=f'Ward {bijnor_contact.ward_number}',
+                department=bijnor_contact.municipality_type,
+                email=bijnor_contact.email,
+                confidence=0.95,
+                sources=[bijnor_contact.source_url],
+                needs_user_review=False,
+                contact_source='bijnor_csv',
+                verification_status=bijnor_contact.verification_status,
+            )
+        if bijnor_directory.has_city(address):
+            resolved_city = _first_value(address, 'city', 'town', 'municipality') or 'Bijnor'
+            return _discover_contact(
+                _fallback(f'No verified Bijnor CSV email matched {resolved_city}', ward),
+                resolved_city,
+                ward,
+                issue_type,
+                contact_discovery,
+            )
+
+    city = _first_value(address, 'city', 'town', 'municipality')
     if not city:
         return _fallback('No city was returned by geocoding', ward)
 

@@ -28,6 +28,20 @@ export class AgentClientError extends Error {
   }
 }
 
+export function describeFetchError(error: unknown, url: string): string {
+  if (!(error instanceof Error)) return `Agent request failed while calling ${url}`;
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const c =
+    cause && typeof cause === 'object'
+      ? (cause as { code?: string; message?: string; address?: string; port?: number })
+      : undefined;
+  const parts = [error.message];
+  if (c?.code) parts.push(c.code);
+  if (c?.message && c.message !== error.message) parts.push(c.message);
+  if (c?.address) parts.push(`${c.address}${c.port ? `:${c.port}` : ''}`);
+  return `${parts.join(' - ')} (calling ${url})`;
+}
+
 export class AgentClient {
   constructor(
     private readonly baseUrl: string = env.AGENT_BASE_URL,
@@ -42,7 +56,7 @@ export class AgentClient {
         photo_url: input.photoUrl,
         coords: [input.lat, input.lng],
         description: input.description ?? 'No description provided',
-        ...(input.reportDate ? { report_date: input.reportDate.toISOString() } : {}),
+        ...(input.reportDate ? { report_date: input.reportDate.toISOString().slice(0, 10) } : {}),
       }),
     }).then((response) => response.run_id);
   }
@@ -54,10 +68,11 @@ export class AgentClient {
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {
+    const url = `${this.baseUrl.replace(/\/$/, '')}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await fetch(`${this.baseUrl.replace(/\/$/, '')}${path}`, {
+      const response = await fetch(url, {
         ...init,
         signal: controller.signal,
         headers: {
@@ -81,7 +96,7 @@ export class AgentClient {
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw new AgentClientError('Agent request timed out');
       }
-      throw new AgentClientError(error instanceof Error ? error.message : 'Agent request failed');
+      throw new AgentClientError(describeFetchError(error, url));
     } finally {
       clearTimeout(timeout);
     }

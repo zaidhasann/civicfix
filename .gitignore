@@ -18,3 +18,11 @@ Thumbs.db
 .vscode/
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Antigravity generated and runtime files
+.civicfix/
+services/agent/data/*.csv
+services/agent/scripts/
+apps/web/*.log
+*.sqlite*
+*.tsbuildinfo

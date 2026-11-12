@@ -4,6 +4,9 @@ services:
       context: ./services/agent
     env_file:
       - ./services/agent/.env
+    environment:
+      AGENT_CHECKPOINT_DB: /data/runs.sqlite
+      AGENT_VECTOR_STORE_PATH: /data/chroma
     ports:
       - '8000:8000'
     volumes:

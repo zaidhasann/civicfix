@@ -4,6 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
+DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Ingest CivicFix documents into a vector store.')
@@ -11,13 +13,13 @@ def main() -> int:
     parser.add_argument(
         '--path',
         type=Path,
-        default=Path('/app/data/municipalities.json'),
+        default=DATA_DIR / 'municipalities.json',
         help='Path to a municipality directory JSON file',
     )
     parser.add_argument(
         '--manifest',
         type=Path,
-        default=Path('/app/data/legal_sources.json'),
+        default=DATA_DIR / 'legal_sources.json',
         help='Path to the legal source manifest JSON file',
     )
     parser.add_argument(

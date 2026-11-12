@@ -20,7 +20,6 @@ interface UploadSignature {
   api_key: string;
   cloud_name: string;
   folder: string;
-  max_file_size: string;
   signature: string;
   timestamp: string;
 }
@@ -55,7 +54,6 @@ function uploadToCloudinary(
   formData.append('signature', signature.signature);
   formData.append('folder', signature.folder);
   formData.append('allowed_formats', signature.allowed_formats);
-  formData.append('max_file_size', signature.max_file_size);
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
