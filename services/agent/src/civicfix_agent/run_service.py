@@ -15,6 +15,7 @@ from civicfix_agent.config import Settings
 from civicfix_agent.contact_discovery import ContactDiscovery, TavilyContactDiscovery
 from civicfix_agent.geocode import Geocoder, create_geocoder
 from civicfix_agent.graph import build_complaint_graph
+from civicfix_agent.up_directory import UPWardDirectory
 from civicfix_agent.vector_store import VectorStore, create_vector_store
 from civicfix_agent.vision import LLMClient, VisionLLMClient
 

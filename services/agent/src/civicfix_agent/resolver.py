@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from civicfix_agent.bijnor_directory import BijnorWardDirectory
+from civicfix_agent.up_directory import UPWardDirectory
 from civicfix_agent.contact_discovery import ContactDiscovery
 from civicfix_agent.vector_store import VectorStore
 
@@ -33,6 +34,7 @@ def resolve_location(
     confidence_threshold: float = 0.65,
     contact_discovery: ContactDiscovery | None = None,
     bijnor_directory: BijnorWardDirectory | None = None,
+    up_directory: UPWardDirectory | None = None,
 ) -> LocationResolution:
     ward = _first_value(address, 'ward', 'ward_zone', 'suburb') or 'Unknown'
 
@@ -54,6 +56,35 @@ def resolve_location(
             resolved_city = _first_value(address, 'city', 'town', 'municipality') or 'Bijnor'
             return _discover_contact(
                 _fallback(f'No verified Bijnor CSV email matched {resolved_city}', ward),
+                resolved_city,
+                ward,
+                issue_type,
+                contact_discovery,
+            )
+
+    # UP 75-district directory (covers all UP districts except Bijnor which has its own).
+    if up_directory is not None:
+        up_contact = up_directory.lookup(address)
+        if up_contact is not None:
+            district_label = up_contact.district
+            muni_label = f'{district_label} {up_contact.municipality_type}'
+            email = up_contact.email or up_contact.fallback_email
+            return LocationResolution(
+                municipality=muni_label,
+                ward=f'Ward {up_contact.ward_number}' if up_contact.ward_number else ward,
+                department=up_contact.municipality_type,
+                email=email,
+                confidence=0.95 if up_contact.email else 0.7,
+                sources=[up_contact.source_url],
+                needs_user_review=not bool(up_contact.email),
+                contact_source='up_csv',
+                verification_status=up_contact.verification_status,
+            )
+        if up_directory.has_district(address):
+            resolved_city = _first_value(address, 'city', 'town', 'municipality',
+                                         'county', 'state_district', 'district') or 'Unknown'
+            return _discover_contact(
+                _fallback(f'No UP CSV email matched {resolved_city}', ward),
                 resolved_city,
                 ward,
                 issue_type,

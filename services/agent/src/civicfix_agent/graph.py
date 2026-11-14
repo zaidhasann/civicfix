@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from civicfix_agent.bijnor_directory import BijnorWardDirectory
+from civicfix_agent.up_directory import UPWardDirectory
 from civicfix_agent.classifier import ClassifierOutput
 from civicfix_agent.contact_discovery import ContactDiscovery
 from civicfix_agent.guardrails import (
@@ -190,7 +191,7 @@ def build_complaint_graph(
     builder.add_node('guardrails', lambda state: apply_guardrails(state, photo_detector))
     builder.add_node(
         'resolve_location',
-        lambda state: resolve_location(state, vector_store, contact_discovery, bijnor_directory),
+        lambda state: resolve_location(state, vector_store, contact_discovery, bijnor_directory, up_directory),
     )
     builder.add_node('write_draft', lambda state: write_draft(state, vector_store))
     builder.add_node('needs_input', needs_input)
