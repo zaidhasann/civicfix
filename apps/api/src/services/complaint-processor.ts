@@ -116,12 +116,24 @@ export function mapAgentResult(
   }
 
   if (run.status === 'needs_input') {
+    const resolvedRecipient =
+      jurisdiction.success && jurisdiction.data.email
+        ? {
+            department: jurisdiction.data.department,
+            email: jurisdiction.data.email,
+            ward: jurisdiction.data.ward,
+            municipality: jurisdiction.data.municipality,
+            verificationStatus: 'unverified' as const,
+            sourceUrls: jurisdiction.data.sources,
+          }
+        : complaint.recipient;
+
     return {
       kind: 'needs_input',
       error: 'Please confirm the recipient before sending this report',
       results: {
         classification: mappedClassification,
-        recipient: complaint.recipient,
+        recipient: resolvedRecipient,
         draft: fallbackDraft,
       },
     };
