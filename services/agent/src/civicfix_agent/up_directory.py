@@ -104,6 +104,7 @@ class UPWardDirectory:
             address.get('town'),
             address.get('municipality'),
             address.get('suburb'),
+            self._extract_district_from_road(address.get('road') or address.get('street')),
         ]
         for raw in candidates:
             if not raw:
@@ -115,6 +116,17 @@ class UPWardDirectory:
             for district_key in self._index:
                 if district_key in key or key in district_key:
                     return district_key
+        return None
+
+    def _extract_district_from_road(self, road: str | None) -> str | None:
+        if not road:
+            return None
+        # Check if any known UP district name appears in the road name (e.g. 'Agra Expressway' -> 'Agra')
+        road_clean = _normalise(road)
+        for district_key in sorted(self._index.keys(), key=len, reverse=True):
+            pattern = rf'\b{re.escape(district_key)}\b'
+            if re.search(pattern, road_clean):
+                return district_key
         return None
 
     @staticmethod
