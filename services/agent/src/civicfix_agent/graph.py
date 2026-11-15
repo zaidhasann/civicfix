@@ -70,6 +70,7 @@ def resolve_location(
     vector_store: VectorStore | None = None,
     contact_discovery: ContactDiscovery | None = None,
     bijnor_directory: BijnorWardDirectory | None = None,
+    up_directory: UPWardDirectory | None = None,
 ) -> dict[str, LocationResolution | str]:
     """Resolve jurisdiction with RAG when a geocoded address and store are available."""
 
@@ -80,6 +81,7 @@ def resolve_location(
                 vector_store,
                 contact_discovery=contact_discovery,
                 bijnor_directory=bijnor_directory,
+                up_directory=up_directory,
             )
         return {'jurisdiction': resolution}
     return {'jurisdiction': 'unresolved'}
@@ -183,6 +185,7 @@ def build_complaint_graph(
     photo_detector: PhotoPrivacyDetector | None = None,
     contact_discovery: ContactDiscovery | None = None,
     bijnor_directory: BijnorWardDirectory | None = None,
+    up_directory: UPWardDirectory | None = None,
 ):
     """Build a checkpointed graph that interrupts before human approval."""
 
