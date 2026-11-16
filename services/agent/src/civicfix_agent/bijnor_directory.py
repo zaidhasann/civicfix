@@ -60,12 +60,18 @@ class BijnorWardDirectory:
 
         chosen_municipality = _disambiguate_municipality(matched_municipalities, city_key)
 
+        municipality_rows = [
+            row for row in self._rows if row.get('municipality') == chosen_municipality
+        ]
+        # Prefer exact ward match if a specific numeric ward was given
         matches = [
             row
-            for row in self._rows
-            if row.get('municipality') == chosen_municipality
-            and (ward is None or _normalise_ward(row.get('ward_number')) == ward)
+            for row in municipality_rows
+            if (ward is None or _normalise_ward(row.get('ward_number')) == ward)
         ]
+        # If no ward matches the suburb or text label (e.g. 'Police Line'), fall back to municipality rows
+        if not matches:
+            matches = municipality_rows
         if not matches:
             return None
         row = next((candidate for candidate in matches if candidate.get('municipal_contact_email')), None)
