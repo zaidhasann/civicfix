@@ -84,6 +84,53 @@ def municipality_documents(path: Path | None = None) -> list[VectorDocument]:
                     metadata=row,
                 )
             )
+    up_path = Path(__file__).resolve().parents[2] / 'data' / 'up_ward_directory.csv'
+    if up_path.is_file():
+        from civicfix_agent.up_directory import UPWardDirectory
+        up = UPWardDirectory(up_path)
+        grouped: dict[tuple[str, str, str], dict[str, str | int]] = {}
+        for row in up._rows:
+            district = row.get('district', '').strip()
+            muni_type = row.get('municipality_type', '').strip()
+            muni_code = row.get('municipality_code', '').strip()
+            key = (district, muni_type, muni_code)
+            if key not in grouped:
+                grouped[key] = {
+                    'district': district,
+                    'municipality_type': muni_type,
+                    'municipality_code': muni_code,
+                    'email': row.get('municipal_contact_email', '').strip(),
+                    'fallback_email': row.get('fallback_contact_email', '').strip(),
+                    'total_wards': 0,
+                }
+            grouped[key]['total_wards'] = int(grouped[key]['total_wards']) + 1
+            if not grouped[key]['email'] and row.get('municipal_contact_email', '').strip():
+                grouped[key]['email'] = row.get('municipal_contact_email', '').strip()
+
+        for idx, item in enumerate(grouped.values()):
+            email = str(item['email'] or item['fallback_email'])
+            text = (
+                f"District: {item['district']}. Municipality: {item['district']} {item['municipality_type']}. "
+                f"Type: {item['municipality_type']}. Total wards: {item['total_wards']}. "
+                f"State: Uttar Pradesh. Official Email: {email}."
+            )
+            metadata = {
+                'city': str(item['district']),
+                'district': str(item['district']),
+                'ward': f"Wards 1-{item['total_wards']}",
+                'department': str(item['municipality_type']),
+                'doc_type': 'up_municipality_directory',
+                'source_url': 'https://localbodies.up.nic.in/',
+                'official_email': email,
+                'verification_status': 'verified' if item['email'] else 'fallback',
+            }
+            documents.append(
+                VectorDocument(
+                    document_id=f"up-muni-{idx}",
+                    text=text,
+                    metadata=metadata,
+                )
+            )
     return documents
 
 
@@ -127,6 +174,53 @@ def legal_documents(
                 VectorDocument(
                     document_id=f'legal-{source_index}-{chunk_index}',
                     text=chunk,
+                    metadata=metadata,
+                )
+            )
+    up_path = Path(__file__).resolve().parents[2] / 'data' / 'up_ward_directory.csv'
+    if up_path.is_file():
+        from civicfix_agent.up_directory import UPWardDirectory
+        up = UPWardDirectory(up_path)
+        grouped: dict[tuple[str, str, str], dict[str, str | int]] = {}
+        for row in up._rows:
+            district = row.get('district', '').strip()
+            muni_type = row.get('municipality_type', '').strip()
+            muni_code = row.get('municipality_code', '').strip()
+            key = (district, muni_type, muni_code)
+            if key not in grouped:
+                grouped[key] = {
+                    'district': district,
+                    'municipality_type': muni_type,
+                    'municipality_code': muni_code,
+                    'email': row.get('municipal_contact_email', '').strip(),
+                    'fallback_email': row.get('fallback_contact_email', '').strip(),
+                    'total_wards': 0,
+                }
+            grouped[key]['total_wards'] = int(grouped[key]['total_wards']) + 1
+            if not grouped[key]['email'] and row.get('municipal_contact_email', '').strip():
+                grouped[key]['email'] = row.get('municipal_contact_email', '').strip()
+
+        for idx, item in enumerate(grouped.values()):
+            email = str(item['email'] or item['fallback_email'])
+            text = (
+                f"District: {item['district']}. Municipality: {item['district']} {item['municipality_type']}. "
+                f"Type: {item['municipality_type']}. Total wards: {item['total_wards']}. "
+                f"State: Uttar Pradesh. Official Email: {email}."
+            )
+            metadata = {
+                'city': str(item['district']),
+                'district': str(item['district']),
+                'ward': f"Wards 1-{item['total_wards']}",
+                'department': str(item['municipality_type']),
+                'doc_type': 'up_municipality_directory',
+                'source_url': 'https://localbodies.up.nic.in/',
+                'official_email': email,
+                'verification_status': 'verified' if item['email'] else 'fallback',
+            }
+            documents.append(
+                VectorDocument(
+                    document_id=f"up-muni-{idx}",
+                    text=text,
                     metadata=metadata,
                 )
             )

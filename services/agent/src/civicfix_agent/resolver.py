@@ -91,18 +91,25 @@ def resolve_location(
                 contact_discovery,
             )
 
-    city = _first_value(address, 'city', 'town', 'municipality')
-    if not city:
-        return _fallback('No city was returned by geocoding', ward)
+    city = _first_value(address, 'city', 'town', 'municipality', 'county', 'district', 'suburb')
+    road = _first_value(address, 'road', 'street')
+    search_query = ' '.join(filter(None, [city, road, issue_type]))
+    if not search_query:
+        return _fallback('No location details were returned by geocoding', ward)
 
+    # First try querying with city filter if city is known
     results = vector_store.query(
-        f'{city} {issue_type}',
+        search_query,
         limit=5,
-        metadata_filter={'city': city},
+        metadata_filter={'city': city} if city else None,
     )
+    # If no results with strict filter, run semantic search across all indexed municipalities
     if not results:
-        resolution = _fallback(f'No jurisdiction documents matched city {city}', ward)
-        return _discover_contact(resolution, city, ward, issue_type, contact_discovery)
+        results = vector_store.query(search_query, limit=5)
+
+    if not results:
+        resolution = _fallback(f'No jurisdiction documents matched query: {search_query}', ward)
+        return _discover_contact(resolution, city or 'Unknown', ward, issue_type, contact_discovery)
 
     match = results[0]
     metadata = match.metadata
@@ -111,16 +118,22 @@ def resolve_location(
     verified_local_contact = (
         metadata.get('verification_status') == 'verified' and bool(metadata.get('official_email'))
     )
+    # Map municipality and email from semantic search match
+    matched_municipality = metadata.get('district') or metadata.get('city') or city or 'Local Authority'
+    if metadata.get('department'):
+        matched_municipality = f"{matched_municipality} {metadata.get('department')}"
+    matched_email = metadata.get('official_email') or None
+
     resolution = LocationResolution(
-        municipality=metadata.get('city', city) if not needs_review else FallbackRecipient,
-        ward=metadata.get('ward', ward) if not needs_review else ward,
-        department=metadata.get('department', FallbackRecipient) if not needs_review else FallbackRecipient,
-        email=metadata.get('official_email') if not needs_review and verified_local_contact else None,
+        municipality=matched_municipality,
+        ward=metadata.get('ward', ward) or ward,
+        department=metadata.get('department', 'Municipal Administration'),
+        email=matched_email,
         confidence=confidence,
         sources=_sources(match.metadata, match.document_id),
         needs_user_review=needs_review,
-        contact_source='local',
-        verification_status='verified' if verified_local_contact else 'not_found',
+        contact_source='vector_store',
+        verification_status=metadata.get('verification_status', 'unverified'),
     )
     if needs_review:
         return _discover_contact(resolution, city, ward, issue_type, contact_discovery)
@@ -154,11 +167,11 @@ def _discover_contact(
     )
 
 
-def _confidence(city: str, issue_type: str, text: str, distance: float) -> float:
+def _confidence(city: str | None, issue_type: str, text: str, distance: float) -> float:
     score = 0.35
-    if city.casefold() in text.casefold():
+    if city and city.casefold() in text.casefold():
         score += 0.25
-    if issue_type.casefold() in text.casefold():
+    if issue_type and issue_type.casefold() in text.casefold():
         score += 0.25
     return min(0.99, max(0.0, score + max(0.0, 0.15 - distance * 0.05)))
 
