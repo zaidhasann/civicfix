@@ -47,6 +47,7 @@ class RunService:
         geocoder: Geocoder | None = None,
         contact_discovery: ContactDiscovery | None = None,
         bijnor_directory: BijnorWardDirectory | None = None,
+        up_directory: UPWardDirectory | None = None,
     ) -> None:
         self.geocoder = geocoder
         self.graph = build_complaint_graph(
@@ -55,6 +56,7 @@ class RunService:
             vector_store=vector_store,
             contact_discovery=contact_discovery,
             bijnor_directory=bijnor_directory,
+            up_directory=up_directory,
         )
 
     def start(self, payload: RunInput) -> str:
@@ -103,21 +105,14 @@ def create_run_service(
     bijnor_directory: BijnorWardDirectory | None = None,
     up_directory: UPWardDirectory | None = None,
 ) -> Iterator[RunService]:
-    database_path: str,
-    *,
-    settings: Settings | None = None,
-    llm_client: LLMClient | None = None,
-    vector_store: VectorStore | None = None,
-    geocoder: Geocoder | None = None,
-    contact_discovery: ContactDiscovery | None = None,
-    bijnor_directory: BijnorWardDirectory | None = None,
-) -> Iterator[RunService]:
     created_clients: list[object] = []
     if bijnor_directory is None and settings is not None and settings.bijnor_csv_path.is_file():
         bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
     if up_directory is None and settings is not None and settings.up_csv_path.is_file():
         up_directory = UPWardDirectory(settings.up_csv_path)
-        bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
+        # Ensure bijnor_directory is also set (for completeness)
+        if bijnor_directory is None:
+            bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
     if settings is not None:
         if llm_client is None and settings.llm_api_key:
             llm_client = VisionLLMClient(settings)
@@ -146,6 +141,7 @@ def create_run_service(
                 geocoder,
                 contact_discovery,
                 bijnor_directory,
+                up_directory,
             )
     finally:
         for client in reversed(created_clients):
