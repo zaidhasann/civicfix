@@ -10,6 +10,8 @@ ward_id                 – unique row key (e.g. ``UP_agra_nagar_nigam_1_1``)
 district                – district name in English (e.g. ``Agra``)
 municipality_type       – ``Nagar Nigam`` / ``Nagar Palika Parishad`` / ``Nagar Panchayat``
 municipality_code       – numeric code that groups wards inside the same municipality
+municipality_name_hi    – municipality name in Hindi script
+municipality_name_en    – municipality name in English (machine-transliterated, needs review)
 ward_number             – ward number (integer as string)
 municipal_contact_email – primary verified email for that municipality
 fallback_contact_email  – state-level fallback when no municipality email exists
@@ -21,6 +23,7 @@ import csv
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 # Priority order: larger / more capable bodies first.
 _MUNICIPALITY_TYPE_PRIORITY: dict[str, int] = {
@@ -29,17 +32,39 @@ _MUNICIPALITY_TYPE_PRIORITY: dict[str, int] = {
     'nagar panchayat': 2,
 }
 
+# Spelling-variant alias map: normalised input → canonical English name.
+# Applied during municipality matching so "Bidhuna", "Bilhuna", "Bidhuunaa"
+# all resolve to the same row. Add entries here as variants are discovered.
+_MUNICIPALITY_ALIASES: dict[str, str] = {
+    'bidhuna': 'Bidhuna',
+    'bilhuna': 'Bidhuna',
+    'bidhuunaa': 'Bidhuna',
+    'phaphund': 'Phaphund',
+    'phphuud': 'Phaphund',
+    'atasu': 'Atasu',
+    'attsuu': 'Atasu',
+    'dibiyapur': 'Dibiyapur',
+    'dibiyaapur': 'Dibiyapur',
+    'achhalda': 'Achhalda',
+    'achldaa': 'Achhalda',
+    'jais': 'Jais',
+    'jayas': 'Jais',
+    'allahabad': 'Prayagraj',
+}
+
 
 @dataclass(frozen=True)
 class UPWardContact:
     district: str
     municipality_code: str
     municipality_type: str
+    municipality_name_en: str
     ward_number: str
     email: str | None
     fallback_email: str | None
     source_url: str
     verification_status: str
+    match_level: Literal['municipality', 'district', 'none'] = 'district'
 
 
 class UPWardDirectory:
@@ -57,33 +82,46 @@ class UPWardDirectory:
         for row in self._rows:
             key = _normalise(row.get('district', ''))
             self._index.setdefault(key, []).append(row)
+        # Pre-build municipality_name_en → rows index for municipality-level match.
+        self._muni_index: dict[str, list[dict[str, str]]] = {}
+        for row in self._rows:
+            en_name = _normalise(row.get('municipality_name_en', ''))
+            hi_name = _normalise(row.get('municipality_name_hi', ''))
+            if en_name:
+                self._muni_index.setdefault(en_name, []).append(row)
+            if hi_name and hi_name != en_name:
+                self._muni_index.setdefault(hi_name, []).append(row)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def lookup(self, address: dict[str, str | None]) -> UPWardContact | None:
-        """Return the best ward contact for *address* or ``None``."""
+        """Return the best ward contact for *address* or ``None``.
 
+        Resolution order:
+        1. Municipality-level match (city/town/village/suburb against
+           English/Hindi municipality names within the resolved district).
+        2. District-level fallback (best-priority municipality in district).
+        """
         district_key = self._resolve_district_key(address)
+
+        # --- Layer 1: municipality-level match ---
+        city_hint = _first_value(address, 'city', 'town', 'village', 'suburb', 'municipality')
+        if city_hint:
+            contact = self._match_municipality(city_hint, district_key)
+            if contact is not None:
+                return contact
+
+        # --- Layer 2: district-level fallback ---
         if not district_key:
             return None
-
         rows = self._index.get(district_key, [])
         if not rows:
             return None
 
-        ward_hint = _normalise_ward(_first_value(address, 'ward', 'ward_zone', 'suburb'))
-
-        # Try to find a ward-level match first.
-        if ward_hint:
-            ward_rows = [r for r in rows if _normalise_ward(r.get('ward_number')) == ward_hint]
-            contact = _best_row(ward_rows)
-            if contact:
-                return contact
-
-        # Fall back to the best-priority municipality in that district.
-        return _best_row(rows)
+        contact = _best_row(rows, match_level='district')
+        return contact
 
     def has_district(self, address: dict[str, str | None]) -> bool:
         """Return ``True`` if the address maps to any covered UP district."""
@@ -93,8 +131,46 @@ class UPWardDirectory:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _match_municipality(
+        self,
+        city_hint: str,
+        district_key: str | None,
+    ) -> UPWardContact | None:
+        """Try to find a municipality row matching *city_hint*.
+
+        Checks alias map first, then looks up normalised English/Hindi names.
+        If *district_key* is known, restricts the search to that district.
+        """
+        normalised = _normalise(city_hint)
+        # Apply alias map (e.g. "Bilhuna" → "Bidhuna")
+        canonical = _MUNICIPALITY_ALIASES.get(normalised, city_hint)
+        normalised_canonical = _normalise(canonical)
+
+        # Collect candidate rows from the municipality index
+        candidate_rows: list[dict[str, str]] = []
+        for key in [normalised, normalised_canonical]:
+            candidate_rows.extend(self._muni_index.get(key, []))
+
+        if not candidate_rows:
+            return None
+
+        # Filter to district if known
+        if district_key:
+            district_rows = [
+                r for r in candidate_rows
+                if _normalise(r.get('district', '')) == district_key
+            ]
+            if district_rows:
+                candidate_rows = district_rows
+
+        return _best_row(candidate_rows, match_level='municipality')
+
     def _resolve_district_key(self, address: dict[str, str | None]) -> str | None:
-        """Try multiple address fields to find a matching district key."""
+        """Try multiple address fields to find a matching district key.
+
+        NOTE: Road-name extraction has been intentionally removed to avoid
+        false matches (e.g. "Agra-Lucknow Expressway" → Agra instead of Auraiya).
+        """
         # Fields most likely to carry the district name, in priority order.
         candidates = [
             address.get('county'),          # Nominatim/OSM: district is often 'county'
@@ -104,7 +180,6 @@ class UPWardDirectory:
             address.get('town'),
             address.get('municipality'),
             address.get('suburb'),
-            self._extract_district_from_road(address.get('road') or address.get('street')),
         ]
         for raw in candidates:
             if not raw:
@@ -116,17 +191,6 @@ class UPWardDirectory:
             for district_key in self._index:
                 if district_key in key or key in district_key:
                     return district_key
-        return None
-
-    def _extract_district_from_road(self, road: str | None) -> str | None:
-        if not road:
-            return None
-        # Check if any known UP district name appears in the road name (e.g. 'Agra Expressway' -> 'Agra')
-        road_clean = _normalise(road)
-        for district_key in sorted(self._index.keys(), key=len, reverse=True):
-            pattern = rf'\b{re.escape(district_key)}\b'
-            if re.search(pattern, road_clean):
-                return district_key
         return None
 
     @staticmethod
@@ -165,13 +229,19 @@ def _municipality_priority(row: dict[str, str]) -> int:
     )
 
 
-def _best_row(rows: list[dict[str, str]]) -> UPWardContact | None:
+def _best_row(
+    rows: list[dict[str, str]],
+    match_level: Literal['municipality', 'district', 'none'] = 'district',
+) -> UPWardContact | None:
     """Pick the highest-priority row that has a usable email."""
     if not rows:
         return None
 
     # Sort by municipality priority; prefer rows with an email.
-    sorted_rows = sorted(rows, key=lambda r: (_municipality_priority(r), not bool(r.get('municipal_contact_email'))))
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (_municipality_priority(r), not bool(r.get('municipal_contact_email'))),
+    )
 
     for row in sorted_rows:
         email = row.get('municipal_contact_email') or None
@@ -181,10 +251,12 @@ def _best_row(rows: list[dict[str, str]]) -> UPWardContact | None:
                 district=row.get('district', ''),
                 municipality_code=row.get('municipality_code', ''),
                 municipality_type=row.get('municipality_type', ''),
+                municipality_name_en=row.get('municipality_name_en', ''),
                 ward_number=row.get('ward_number', ''),
                 email=email,
                 fallback_email=fallback,
                 source_url='https://localbodies.up.nic.in/',
                 verification_status='verified' if email else 'fallback',
+                match_level=match_level,
             )
     return None

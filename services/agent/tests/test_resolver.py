@@ -65,7 +65,8 @@ def test_pune_coordinates_resolve_city_first_to_pmc_department() -> None:
         store,
     )
 
-    assert result.municipality == 'Pune'
+    # municipality is now the department label when city is contained within it
+    assert result.municipality == 'Pune Municipal Corporation'
     assert result.department == 'Pune Municipal Corporation'
     assert result.ward == 'Citywide'
     assert result.needs_user_review is False
@@ -73,7 +74,14 @@ def test_pune_coordinates_resolve_city_first_to_pmc_department() -> None:
 
 
 def test_unknown_city_uses_review_fallback() -> None:
-    result = resolve_location({'city': 'Unknown'}, 'garbage', FakeVectorStore())
+    # Use an empty store so 'Unknown' returns no matches -> fallback
+    class EmptyStore:
+        def upsert(self, documents):
+            pass
+        def query(self, text, limit=5, metadata_filter=None):
+            return []
+
+    result = resolve_location({'city': 'Unknown'}, 'garbage', EmptyStore())
 
     assert result.municipality == FallbackRecipient
     assert result.department == FallbackRecipient
@@ -97,10 +105,16 @@ def test_local_match_does_not_call_contact_discovery() -> None:
 def test_unmatched_city_uses_unverified_discovered_contact() -> None:
     discovery = FakeDiscovery()
 
+    class EmptyStore:
+        def upsert(self, documents):
+            pass
+        def query(self, text, limit=5, metadata_filter=None):
+            return []
+
     result = resolve_location(
         {'city': 'Unknown', 'ward': 'Ward 7'},
         'garbage',
-        FakeVectorStore(),
+        EmptyStore(),
         contact_discovery=discovery,
     )
 

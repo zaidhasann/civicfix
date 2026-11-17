@@ -1,8 +1,12 @@
 from functools import lru_cache
 from pathlib import Path
+import os
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Root directory of the agent package (services/agent/src/civicfix_agent -> services/agent)
+_AGENT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -10,7 +14,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=(
-            str(Path(__file__).resolve().parents[2] / '.env'),
+            str(_AGENT_ROOT / '.env'),
             '.env',
         ),
         env_prefix='AGENT_',
@@ -35,8 +39,13 @@ class Settings(BaseSettings):
     checkpoint_db: str = '.civicfix/runs.sqlite'
     tavily_api_key: str = ''
     tavily_timeout_seconds: float = 15.0
-    bijnor_csv_path: Path = Path(__file__).resolve().parents[3] / 'data' / 'bijnor_ward_email_directory.csv'
-    up_csv_path: Path = Path(__file__).resolve().parents[3] / 'data' / 'up_ward_directory.csv'
+    # CSV paths – can be overridden via environment variables (useful for Docker)
+    bijnor_csv_path: Path = Path(
+        os.getenv('AGENT_BIJNOR_CSV_PATH', _AGENT_ROOT / 'data' / 'bijnor_ward_email_directory.csv')
+    )
+    up_csv_path: Path = Path(
+        os.getenv('AGENT_UP_CSV_PATH', _AGENT_ROOT / 'data' / 'up_ward_directory.csv')
+    )
 
 
 @lru_cache

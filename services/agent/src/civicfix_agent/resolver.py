@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,6 +9,8 @@ from civicfix_agent.bijnor_directory import BijnorWardDirectory
 from civicfix_agent.up_directory import UPWardDirectory
 from civicfix_agent.contact_discovery import ContactDiscovery
 from civicfix_agent.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 FallbackRecipient = 'CivicFix review queue'
 
@@ -24,6 +27,7 @@ class LocationResolution(BaseModel):
     needs_user_review: bool
     contact_source: str = 'local'
     verification_status: str = 'not_found'
+    match_level: Literal['municipality', 'district', 'nearest', 'none'] = 'none'
 
 
 def resolve_location(
@@ -51,6 +55,7 @@ def resolve_location(
                 needs_user_review=False,
                 contact_source='bijnor_csv',
                 verification_status=bijnor_contact.verification_status,
+                match_level='municipality',
             )
         if bijnor_directory.has_city(address):
             resolved_city = _first_value(address, 'city', 'town', 'municipality') or 'Bijnor'
@@ -67,57 +72,71 @@ def resolve_location(
         up_contact = up_directory.lookup(address)
         if up_contact is not None:
             district_label = up_contact.district
-            muni_label = f'{district_label} {up_contact.municipality_type}'
+            muni_name = up_contact.municipality_name_en or district_label
+            muni_label = f'{muni_name} {up_contact.municipality_type}'
             email = up_contact.email or up_contact.fallback_email
+            logger.info(
+                'UP CSV resolved: district=%s municipality=%s match_level=%s email=%s',
+                district_label,
+                muni_name,
+                up_contact.match_level,
+                email,
+            )
             return LocationResolution(
                 municipality=muni_label,
                 ward=f'Ward {up_contact.ward_number}' if up_contact.ward_number else ward,
                 department=up_contact.municipality_type,
                 email=email,
                 confidence=0.95 if up_contact.email else 0.7,
-                sources=[up_contact.source_url],
+                sources=[up_contact.source_url, f'match_level={up_contact.match_level}'],
                 needs_user_review=not bool(up_contact.email),
                 contact_source='up_csv',
                 verification_status=up_contact.verification_status,
+                match_level=up_contact.match_level,
             )
         if up_directory.has_district(address):
-            # Attempt to find any contact within the district (municipal or fallback)
+            # District recognised but no matching municipality row was found
             district_key = up_directory._resolve_district_key(address)
             rows = up_directory._index.get(district_key, []) if district_key else []
-            # Reuse internal best-row logic to pick a contact with an email or fallback
             from civicfix_agent.up_directory import _best_row
-            contact = _best_row(rows)
+            contact = _best_row(rows, match_level='district')
             if contact is not None:
                 district_label = contact.district
                 muni_label = f'{district_label} {contact.municipality_type}'
                 email = contact.email or contact.fallback_email
+                logger.warning(
+                    'UP CSV district fallback: district=%s email=%s (no municipality match)',
+                    district_label,
+                    email,
+                )
                 return LocationResolution(
                     municipality=muni_label,
                     ward=ward,
                     department=contact.municipality_type,
                     email=email,
-                    confidence=0.7,
-                    sources=[contact.source_url],
-                    needs_user_review=not bool(contact.email),
+                    confidence=0.6,
+                    sources=[contact.source_url, 'match_level=district'],
+                    needs_user_review=True,
                     contact_source='up_csv',
                     verification_status=contact.verification_status,
+                    match_level='district',
                 )
-            # No email found for the district; fallback with empty email
+            # No email at all for the district
             resolved_city = _first_value(address, 'city', 'town', 'municipality',
                                          'county', 'state_district', 'district') or 'Unknown'
+            logger.warning('UP CSV: no email found for district derived from %s', resolved_city)
             return LocationResolution(
                 municipality=FallbackRecipient,
                 ward=ward,
                 department=FallbackRecipient,
                 email='',
-                confidence=0.6,
+                confidence=0.4,
                 sources=[f'No UP CSV email matched {resolved_city}'],
                 needs_user_review=True,
                 contact_source='up_csv',
                 verification_status='not_found',
+                match_level='none',
             )
-
-
 
     city = _first_value(address, 'city', 'town', 'municipality', 'county', 'district', 'suburb')
     road = _first_value(address, 'road', 'street')
@@ -146,10 +165,17 @@ def resolve_location(
     verified_local_contact = (
         metadata.get('verification_status') == 'verified' and bool(metadata.get('official_email'))
     )
-    # Map municipality and email from semantic search match
-    matched_municipality = metadata.get('district') or metadata.get('city') or city or 'Local Authority'
-    if metadata.get('department'):
-        matched_municipality = f"{matched_municipality} {metadata.get('department')}"
+    # Map municipality and email from semantic search match.
+    # Prefer the department string when it already implies the city (e.g. "Pune Municipal Corporation").
+    dept = metadata.get('department', '')
+    city_label = metadata.get('district') or metadata.get('city') or city or 'Local Authority'
+    if dept and city_label.casefold() in dept.casefold():
+        # Department already contains the city – use it directly as the municipality label
+        matched_municipality = dept
+    elif dept:
+        matched_municipality = f'{city_label} {dept}'
+    else:
+        matched_municipality = city_label
     matched_email = metadata.get('official_email') or None
 
     resolution = LocationResolution(
@@ -162,6 +188,7 @@ def resolve_location(
         needs_user_review=needs_review,
         contact_source='vector_store',
         verification_status=metadata.get('verification_status', 'unverified'),
+        match_level='none',
     )
     if needs_review:
         return _discover_contact(resolution, city, ward, issue_type, contact_discovery)
@@ -215,6 +242,7 @@ def _fallback(reason: str, ward: str) -> LocationResolution:
         needs_user_review=True,
         contact_source='local',
         verification_status='not_found',
+        match_level='none',
     )
 
 
