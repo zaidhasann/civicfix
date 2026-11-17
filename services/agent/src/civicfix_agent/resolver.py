@@ -81,15 +81,43 @@ def resolve_location(
                 verification_status=up_contact.verification_status,
             )
         if up_directory.has_district(address):
+            # Attempt to find any contact within the district (municipal or fallback)
+            district_key = up_directory._resolve_district_key(address)
+            rows = up_directory._index.get(district_key, []) if district_key else []
+            # Reuse internal best-row logic to pick a contact with an email or fallback
+            from civicfix_agent.up_directory import _best_row
+            contact = _best_row(rows)
+            if contact is not None:
+                district_label = contact.district
+                muni_label = f'{district_label} {contact.municipality_type}'
+                email = contact.email or contact.fallback_email
+                return LocationResolution(
+                    municipality=muni_label,
+                    ward=ward,
+                    department=contact.municipality_type,
+                    email=email,
+                    confidence=0.7,
+                    sources=[contact.source_url],
+                    needs_user_review=not bool(contact.email),
+                    contact_source='up_csv',
+                    verification_status=contact.verification_status,
+                )
+            # No email found for the district; fallback with empty email
             resolved_city = _first_value(address, 'city', 'town', 'municipality',
                                          'county', 'state_district', 'district') or 'Unknown'
-            return _discover_contact(
-                _fallback(f'No UP CSV email matched {resolved_city}', ward),
-                resolved_city,
-                ward,
-                issue_type,
-                contact_discovery,
+            return LocationResolution(
+                municipality=FallbackRecipient,
+                ward=ward,
+                department=FallbackRecipient,
+                email='',
+                confidence=0.6,
+                sources=[f'No UP CSV email matched {resolved_city}'],
+                needs_user_review=True,
+                contact_source='up_csv',
+                verification_status='not_found',
             )
+
+
 
     city = _first_value(address, 'city', 'town', 'municipality', 'county', 'district', 'suburb')
     road = _first_value(address, 'road', 'street')
