@@ -83,6 +83,10 @@ export function createEmailService(logger: Logger): ComplaintEmailService {
 
   return {
     async sendApprovedComplaint(complaint) {
+      const recipientEmail = complaint.recipient?.email || '';
+      if (!recipientEmail || recipientEmail.endsWith('.invalid')) {
+        throw new Error(\Refusing to send email to invalid/placeholder address: ''\);
+      }
       const message = buildMessage(complaint);
       if (!transporter) {
         const sentAt = new Date();

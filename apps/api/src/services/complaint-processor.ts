@@ -75,11 +75,16 @@ export function mapAgentResult(
     };
   }
 
+  const hasValidEmail =
+    jurisdiction.success &&
+    Boolean(jurisdiction.data.email) &&
+    !jurisdiction.data.email?.endsWith('.invalid');
+
   if (
     run.status === 'awaiting_approval' &&
     jurisdiction.success &&
     !jurisdiction.data.needs_user_review &&
-    jurisdiction.data.email
+    hasValidEmail
   ) {
     return {
       kind: 'ready',
@@ -87,7 +92,7 @@ export function mapAgentResult(
         classification: mappedClassification,
         recipient: {
           department: jurisdiction.data.department,
-          email: jurisdiction.data.email,
+          email: jurisdiction.data.email!,
           ward: jurisdiction.data.ward,
           municipality: jurisdiction.data.municipality,
         },
@@ -96,7 +101,7 @@ export function mapAgentResult(
     };
   }
 
-  if (jurisdiction.success && jurisdiction.data.needs_user_review && jurisdiction.data.email) {
+  if (jurisdiction.success && hasValidEmail) {
     return {
       kind: 'needs_input',
       error: 'Please confirm the recipient before sending this report',
@@ -104,7 +109,7 @@ export function mapAgentResult(
         classification: mappedClassification,
         recipient: {
           department: jurisdiction.data.department,
-          email: jurisdiction.data.email,
+          email: jurisdiction.data.email!,
           ward: jurisdiction.data.ward,
           municipality: jurisdiction.data.municipality,
           verificationStatus: 'unverified',
@@ -115,12 +120,12 @@ export function mapAgentResult(
     };
   }
 
-  if (run.status === 'needs_input') {
+  if (run.status === 'needs_input' || !hasValidEmail) {
     const resolvedRecipient =
-      jurisdiction.success && jurisdiction.data.email
+      jurisdiction.success
         ? {
             department: jurisdiction.data.department,
-            email: jurisdiction.data.email,
+            email: hasValidEmail ? jurisdiction.data.email! : '',
             ward: jurisdiction.data.ward,
             municipality: jurisdiction.data.municipality,
             verificationStatus: 'unverified' as const,
@@ -130,7 +135,9 @@ export function mapAgentResult(
 
     return {
       kind: 'needs_input',
-      error: 'Please confirm the recipient before sending this report',
+      error: hasValidEmail
+        ? 'Please confirm the recipient before sending this report'
+        : 'No verified recipient email found for this area. Please provide an email address manually.',
       results: {
         classification: mappedClassification,
         recipient: resolvedRecipient,
