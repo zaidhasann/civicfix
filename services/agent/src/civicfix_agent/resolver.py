@@ -35,6 +35,7 @@ def resolve_location(
     issue_type: Literal['pothole', 'streetlight', 'garbage', 'drainage', 'other', 'not_an_issue'],
     vector_store: VectorStore,
     *,
+    coords: tuple[float, float] | None = None,
     confidence_threshold: float = 0.65,
     contact_discovery: ContactDiscovery | None = None,
     bijnor_directory: BijnorWardDirectory | None = None,
@@ -69,7 +70,7 @@ def resolve_location(
 
     # UP 75-district directory (covers all UP districts except Bijnor which has its own).
     if up_directory is not None:
-        up_contact = up_directory.lookup(address)
+        up_contact = up_directory.lookup(address, coords=coords)
         if up_contact is not None:
             district_label = up_contact.district
             muni_name = up_contact.municipality_name_en or district_label

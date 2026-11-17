@@ -1,0 +1,30 @@
+{
+  "Auraiya::3::Bidhuna": {
+    "lat": 26.7702744,
+    "lng": 79.5367506
+  },
+  "Auraiya::1::Auraiya": {
+    "lat": 26.4664,
+    "lng": 79.5165
+  },
+  "Lucknow::1::Lucknow": {
+    "lat": 26.8467,
+    "lng": 80.9462
+  },
+  "Agra::1::Agra": {
+    "lat": 27.1767,
+    "lng": 78.0081
+  },
+  "Varanasi::1::Varanasi": {
+    "lat": 25.3176,
+    "lng": 82.9739
+  },
+  "Kanpur Nagar::1::Kanpur": {
+    "lat": 26.4499,
+    "lng": 80.3319
+  },
+  "Prayagraj::1::Prayagraj": {
+    "lat": 25.4358,
+    "lng": 81.8463
+  }
+}

@@ -3,23 +3,12 @@
 This module mirrors the ``BijnorWardDirectory`` pattern but operates on the
 master CSV that contains every ward across every district in UP.  It is a
 pure-CSV, dependency-free lookup: no embeddings, no network calls.
-
-CSV columns used
-----------------
-ward_id                 – unique row key (e.g. ``UP_agra_nagar_nigam_1_1``)
-district                – district name in English (e.g. ``Agra``)
-municipality_type       – ``Nagar Nigam`` / ``Nagar Palika Parishad`` / ``Nagar Panchayat``
-municipality_code       – numeric code that groups wards inside the same municipality
-municipality_name_hi    – municipality name in Hindi script
-municipality_name_en    – municipality name in English (machine-transliterated, needs review)
-ward_number             – ward number (integer as string)
-municipal_contact_email – primary verified email for that municipality
-fallback_contact_email  – state-level fallback when no municipality email exists
 """
 
 from __future__ import annotations
 
 import csv
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,9 +21,6 @@ _MUNICIPALITY_TYPE_PRIORITY: dict[str, int] = {
     'nagar panchayat': 2,
 }
 
-# Spelling-variant alias map: normalised input → canonical English name.
-# Applied during municipality matching so "Bidhuna", "Bilhuna", "Bidhuunaa"
-# all resolve to the same row. Add entries here as variants are discovered.
 _MUNICIPALITY_ALIASES: dict[str, str] = {
     'bidhuna': 'Bidhuna',
     'bilhuna': 'Bidhuna',
@@ -50,7 +36,29 @@ _MUNICIPALITY_ALIASES: dict[str, str] = {
     'jais': 'Jais',
     'jayas': 'Jais',
     'allahabad': 'Prayagraj',
+    'lucknow': 'Lucknow',
+    'lkhnuu': 'Lucknow',
+    'agra': 'Agra',
+    'aagraa': 'Agra',
+    'kanpur': 'Kanpur',
+    'kaanpur': 'Kanpur',
+    'varanasi': 'Varanasi',
+    'vaaraanasii': 'Varanasi',
+    'prayagraj': 'Prayagraj',
+    'pryaagraaj': 'Prayagraj',
+    'aligarh': 'Aligarh',
+    'aliigdh': 'Aligarh',
 }
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Compute the great-circle distance in kilometers between two points."""
+    r = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+    return 2.0 * r * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
 
 
 @dataclass(frozen=True)
@@ -64,7 +72,7 @@ class UPWardContact:
     fallback_email: str | None
     source_url: str
     verification_status: str
-    match_level: Literal['municipality', 'district', 'none'] = 'district'
+    match_level: Literal['municipality', 'district', 'nearest', 'none'] = 'district'
 
 
 class UPWardDirectory:
@@ -72,9 +80,10 @@ class UPWardDirectory:
 
     Args:
         path: Path to ``up_ward_directory.csv`` (the merged master file).
+        centroids_path: Optional path to ``up_municipality_centroids.csv``.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, centroids_path: Path | None = None) -> None:
         self.path = path
         self._rows = self._load(path)
         # Pre-build a normalised district → rows index for fast lookup.
@@ -92,17 +101,42 @@ class UPWardDirectory:
             if hi_name and hi_name != en_name:
                 self._muni_index.setdefault(hi_name, []).append(row)
 
+        # Load municipality centroids if available
+        self._centroids: list[dict[str, object]] = []
+        c_path = centroids_path or (path.parent / 'up_municipality_centroids.csv')
+        if c_path.exists():
+            with c_path.open('r', encoding='utf-8') as f:
+                for r in csv.DictReader(f):
+                    try:
+                        lat_val = float(r['lat'])
+                        lng_val = float(r['lng'])
+                        self._centroids.append({
+                            'district': r['district'],
+                            'municipality_code': r['municipality_code'],
+                            'municipality_name_en': r.get('municipality_name_en', ''),
+                            'lat': lat_val,
+                            'lng': lng_val,
+                        })
+                    except (ValueError, KeyError):
+                        continue
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def lookup(self, address: dict[str, str | None]) -> UPWardContact | None:
+    def lookup(
+        self,
+        address: dict[str, str | None],
+        coords: tuple[float, float] | None = None,
+        max_nearest_km: float = 25.0,
+    ) -> UPWardContact | None:
         """Return the best ward contact for *address* or ``None``.
 
         Resolution order:
         1. Municipality-level match (city/town/village/suburb against
            English/Hindi municipality names within the resolved district).
         2. District-level fallback (best-priority municipality in district).
+        3. Nearest municipality centroid (if coords are provided).
         """
         district_key = self._resolve_district_key(address)
 
@@ -114,14 +148,20 @@ class UPWardDirectory:
                 return contact
 
         # --- Layer 2: district-level fallback ---
-        if not district_key:
-            return None
-        rows = self._index.get(district_key, [])
-        if not rows:
-            return None
+        if district_key:
+            rows = self._index.get(district_key, [])
+            if rows:
+                return _best_row(rows, match_level='district')
 
-        contact = _best_row(rows, match_level='district')
-        return contact
+        # --- Layer 3: nearest municipality via coordinates ---
+        lat = coords[0] if coords else _float_val(address.get('lat') or address.get('latitude'))
+        lng = coords[1] if coords else _float_val(address.get('lng') or address.get('lon') or address.get('longitude'))
+        if lat is not None and lng is not None:
+            contact = self._nearest_municipality(lat, lng, max_km=max_nearest_km)
+            if contact is not None:
+                return contact
+
+        return None
 
     def has_district(self, address: dict[str, str | None]) -> bool:
         """Return ``True`` if the address maps to any covered UP district."""
@@ -131,22 +171,45 @@ class UPWardDirectory:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _nearest_municipality(self, lat: float, lng: float, max_km: float = 25.0) -> UPWardContact | None:
+        """Find the closest municipality within max_km using centroids."""
+        if not self._centroids:
+            return None
+
+        best_dist = float('inf')
+        best_candidate: dict[str, object] | None = None
+
+        for c in self._centroids:
+            d = haversine_km(lat, lng, c['lat'], c['lng'])
+            if d < best_dist:
+                best_dist = d
+                best_candidate = c
+
+        if best_candidate and best_dist <= max_km:
+            dist_key = _normalise(str(best_candidate['district']))
+            code = str(best_candidate['municipality_code'])
+            rows = [
+                r for r in self._index.get(dist_key, [])
+                if r.get('municipality_code') == code
+            ]
+            if rows:
+                return _best_row(rows, match_level='nearest')
+            # fallback to district rows
+            dist_rows = self._index.get(dist_key, [])
+            if dist_rows:
+                return _best_row(dist_rows, match_level='nearest')
+
+        return None
+
     def _match_municipality(
         self,
         city_hint: str,
         district_key: str | None,
     ) -> UPWardContact | None:
-        """Try to find a municipality row matching *city_hint*.
-
-        Checks alias map first, then looks up normalised English/Hindi names.
-        If *district_key* is known, restricts the search to that district.
-        """
         normalised = _normalise(city_hint)
-        # Apply alias map (e.g. "Bilhuna" → "Bidhuna")
         canonical = _MUNICIPALITY_ALIASES.get(normalised, city_hint)
         normalised_canonical = _normalise(canonical)
 
-        # Collect candidate rows from the municipality index
         candidate_rows: list[dict[str, str]] = []
         for key in [normalised, normalised_canonical]:
             candidate_rows.extend(self._muni_index.get(key, []))
@@ -154,7 +217,6 @@ class UPWardDirectory:
         if not candidate_rows:
             return None
 
-        # Filter to district if known
         if district_key:
             district_rows = [
                 r for r in candidate_rows
@@ -169,12 +231,11 @@ class UPWardDirectory:
         """Try multiple address fields to find a matching district key.
 
         NOTE: Road-name extraction has been intentionally removed to avoid
-        false matches (e.g. "Agra-Lucknow Expressway" → Agra instead of Auraiya).
+        false matches (e.g. "Agra-Lucknow Expressway" -> Agra instead of Auraiya).
         """
-        # Fields most likely to carry the district name, in priority order.
         candidates = [
-            address.get('county'),          # Nominatim/OSM: district is often 'county'
-            address.get('state_district'),  # Also used by some geocoders
+            address.get('county'),
+            address.get('state_district'),
             address.get('district'),
             address.get('city'),
             address.get('town'),
@@ -187,7 +248,6 @@ class UPWardDirectory:
             key = _normalise(raw)
             if key in self._index:
                 return key
-            # Partial match: "Kanpur Nagar" → "kanpur nagar", "kanpur"
             for district_key in self._index:
                 if district_key in key or key in district_key:
                     return district_key
@@ -207,19 +267,21 @@ def _normalise(value: str) -> str:
     return re.sub(r'\s+', ' ', value).strip().casefold()
 
 
-def _normalise_ward(value: str | None) -> str | None:
-    if not value:
-        return None
-    match = re.search(r'\d+', value)
-    return str(int(match.group())) if match else _normalise(value)
-
-
 def _first_value(address: dict[str, str | None], *keys: str) -> str | None:
     for key in keys:
         value = address.get(key)
         if value:
             return value
     return None
+
+
+def _float_val(val: object) -> float | None:
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
 
 
 def _municipality_priority(row: dict[str, str]) -> int:
@@ -231,13 +293,11 @@ def _municipality_priority(row: dict[str, str]) -> int:
 
 def _best_row(
     rows: list[dict[str, str]],
-    match_level: Literal['municipality', 'district', 'none'] = 'district',
+    match_level: Literal['municipality', 'district', 'nearest', 'none'] = 'district',
 ) -> UPWardContact | None:
-    """Pick the highest-priority row that has a usable email."""
     if not rows:
         return None
 
-    # Sort by municipality priority; prefer rows with an email.
     sorted_rows = sorted(
         rows,
         key=lambda r: (_municipality_priority(r), not bool(r.get('municipal_contact_email'))),

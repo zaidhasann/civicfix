@@ -91,6 +91,7 @@ def resolve_location(
                 state['geocoded_address'] or {},
                 state['classification'].issue_type,
                 vector_store,
+                coords=state.get('coords'),
                 contact_discovery=contact_discovery,
                 bijnor_directory=bijnor_directory,
                 up_directory=up_directory,
