@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     checkpoint_db: str = '.civicfix/runs.sqlite'
     tavily_api_key: str = ''
     tavily_timeout_seconds: float = 15.0
-    bijnor_csv_path: Path = Path(__file__).resolve().parents[2] / 'data' / 'bijnor_ward_email_directory.csv'
-    up_csv_path: Path = Path(__file__).resolve().parents[2] / 'data' / 'up_ward_directory.csv'
+    bijnor_csv_path: Path = Path(__file__).resolve().parents[3] / 'data' / 'bijnor_ward_email_directory.csv'
+    up_csv_path: Path = Path(__file__).resolve().parents[3] / 'data' / 'up_ward_directory.csv'
 
 
 @lru_cache
