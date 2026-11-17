@@ -107,15 +107,21 @@ class UPWardDirectory:
         if c_path.exists():
             with c_path.open('r', encoding='utf-8') as f:
                 for r in csv.DictReader(f):
+                    lat_str = (r.get('lat') or '').strip()
+                    lng_str = (r.get('lng') or '').strip()
+                    if not lat_str or not lng_str:
+                        continue
                     try:
-                        lat_val = float(r['lat'])
-                        lng_val = float(r['lng'])
+                        lat_val = float(lat_str)
+                        lng_val = float(lng_str)
+                        confidence = (r.get('confidence') or 'medium').strip().lower()
                         self._centroids.append({
                             'district': r['district'],
                             'municipality_code': r['municipality_code'],
                             'municipality_name_en': r.get('municipality_name_en', ''),
                             'lat': lat_val,
                             'lng': lng_val,
+                            'confidence': confidence,
                         })
                     except (ValueError, KeyError):
                         continue
@@ -172,18 +178,24 @@ class UPWardDirectory:
     # ------------------------------------------------------------------
 
     def _nearest_municipality(self, lat: float, lng: float, max_km: float = 25.0) -> UPWardContact | None:
-        """Find the closest municipality within max_km using centroids."""
+        """Find the closest municipality within max_km using centroids, preferring high confidence."""
         if not self._centroids:
             return None
 
+        best_score = float('inf')
         best_dist = float('inf')
         best_candidate: dict[str, object] | None = None
 
+        conf_weight = {'high': 0.0, 'medium': 2.0, 'low': 10.0}
+
         for c in self._centroids:
             d = haversine_km(lat, lng, c['lat'], c['lng'])
-            if d < best_dist:
-                best_dist = d
-                best_candidate = c
+            if d <= max_km:
+                score = d + conf_weight.get(str(c.get('confidence', 'medium')), 2.0)
+                if score < best_score:
+                    best_score = score
+                    best_dist = d
+                    best_candidate = c
 
         if best_candidate and best_dist <= max_km:
             dist_key = _normalise(str(best_candidate['district']))
