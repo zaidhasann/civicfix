@@ -28,18 +28,15 @@ class BijnorWardDirectory:
             return list(csv.DictReader(csv_file))
 
     def lookup(self, address: dict[str, str | None]) -> BijnorWardContact | None:
-        city = _first_value(address, 'city', 'town', 'municipality')
+        city = _first_value(address, 'city', 'town', 'municipality', 'village', 'suburb', 'district', 'county')
         road = _first_value(address, 'road', 'street')
 
-        # If road contains a specific municipality name (e.g. "Mandawar Road"),
-        # extract it as a potential city override or fallback
-        road_municipality = self._extract_municipality_from_road(road)
+        # Only use road name as an absolute last resort when no city/town/district exists at all
+        if not city and road:
+            city = self._extract_municipality_from_road(road)
 
         if not city:
-            if road_municipality:
-                city = road_municipality
-            else:
-                return None
+            return None
 
         ward = _normalise_ward(_first_value(address, 'ward', 'ward_zone', 'suburb'))
         city_key = _normalise_text(city)
@@ -49,11 +46,6 @@ class BijnorWardDirectory:
             for row in self._rows
             if _city_matches(row.get('municipality', ''), city_key)
         }
-
-        # If city was generic Bijnor (or district) but road specifically mentions another town like Mandawar,
-        # add the road's municipality to the candidate set for disambiguation
-        if road_municipality:
-            matched_municipalities.add(road_municipality)
 
         if not matched_municipalities:
             return None

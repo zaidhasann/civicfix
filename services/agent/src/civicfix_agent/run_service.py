@@ -106,13 +106,41 @@ def create_run_service(
     up_directory: UPWardDirectory | None = None,
 ) -> Iterator[RunService]:
     created_clients: list[object] = []
-    if bijnor_directory is None and settings is not None and settings.bijnor_csv_path.is_file():
-        bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
-    if up_directory is None and settings is not None and settings.up_csv_path.is_file():
-        up_directory = UPWardDirectory(settings.up_csv_path)
-        # Ensure bijnor_directory is also set (for completeness)
+    if settings is not None:
+        # Load UP directory independently if file exists
+        if up_directory is None:
+            if settings.up_csv_path.is_file():
+                try:
+                    up_directory = UPWardDirectory(settings.up_csv_path)
+                    districts_count = len(up_directory._index)
+                    munis_count = sum(len({r.get('municipality_code') for r in rows}) for rows in up_directory._index.values())
+                    verified_count = sum(1 for rows in up_directory._index.values() for r in rows if r.get('municipal_contact_email'))
+                    logger.info(
+                        'Loaded UP directory from %s (districts=%d, municipalities=%d, verified_emails=%d)',
+                        settings.up_csv_path,
+                        districts_count,
+                        munis_count,
+                        verified_count,
+                    )
+                except Exception as err:
+                    logger.warning('Failed to initialize UP directory from %s: %s', settings.up_csv_path, err)
+            else:
+                logger.warning('UP directory CSV not found at %s', settings.up_csv_path)
+
+        # Load Bijnor directory independently if file exists
         if bijnor_directory is None:
-            bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
+            if settings.bijnor_csv_path.is_file():
+                try:
+                    bijnor_directory = BijnorWardDirectory(settings.bijnor_csv_path)
+                    logger.info(
+                        'Loaded Bijnor directory from %s (municipalities=%d)',
+                        settings.bijnor_csv_path,
+                        len(bijnor_directory._municipalities),
+                    )
+                except Exception as err:
+                    logger.warning('Failed to initialize Bijnor directory from %s: %s', settings.bijnor_csv_path, err)
+            else:
+                logger.warning('Bijnor directory CSV not found at %s (optional)', settings.bijnor_csv_path)
     if settings is not None:
         if llm_client is None and settings.llm_api_key:
             llm_client = VisionLLMClient(settings)
