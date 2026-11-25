@@ -28,6 +28,8 @@ class LocationResolution(BaseModel):
     contact_source: str = 'local'
     verification_status: str = 'not_found'
     match_level: Literal['municipality', 'district', 'nearest', 'none'] = 'none'
+    channel: Literal['email', 'portal', 'district', 'state'] = 'email'
+    portal_url: str | None = None
 
 
 def resolve_location(
@@ -83,17 +85,21 @@ def resolve_location(
                 up_contact.match_level,
                 email,
             )
+            is_verified = (up_contact.verification_status == 'verified' and bool(up_contact.email))
+            needs_review = not is_verified or up_contact.channel == 'portal'
             return LocationResolution(
                 municipality=muni_label,
                 ward=f'Ward {up_contact.ward_number}' if up_contact.ward_number else ward,
                 department=up_contact.municipality_type,
                 email=email,
-                confidence=0.95 if up_contact.email else 0.7,
+                confidence=0.95 if is_verified else 0.7,
                 sources=[up_contact.source_url, f'match_level={up_contact.match_level}'],
-                needs_user_review=not bool(up_contact.email),
+                needs_user_review=needs_review,
                 contact_source='up_csv',
                 verification_status=up_contact.verification_status,
                 match_level=up_contact.match_level,
+                channel=up_contact.channel,
+                portal_url=up_contact.portal_url,
             )
         if up_directory.has_district(address):
             # District recognised but no matching municipality row was found

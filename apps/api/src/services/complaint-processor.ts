@@ -23,6 +23,9 @@ const jurisdictionSchema = z.object({
   sources: z.array(z.string()),
   needs_user_review: z.boolean(),
   verification_status: z.string().optional(),
+  match_level: z.enum(['municipality', 'district', 'nearest', 'none']).optional(),
+  channel: z.enum(['email', 'portal', 'district', 'state']).optional(),
+  portal_url: z.string().url().nullable().optional(),
 });
 const draftSchema = z.object({
   subject: z.string().min(1).max(500),

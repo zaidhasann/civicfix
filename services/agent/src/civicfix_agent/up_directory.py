@@ -73,6 +73,8 @@ class UPWardContact:
     source_url: str
     verification_status: str
     match_level: Literal['municipality', 'district', 'nearest', 'none'] = 'district'
+    channel: Literal['email', 'portal', 'district', 'state'] = 'email'
+    portal_url: str | None = None
 
 
 class UPWardDirectory:
@@ -83,9 +85,17 @@ class UPWardDirectory:
         centroids_path: Optional path to ``up_municipality_centroids.csv``.
     """
 
-    def __init__(self, path: Path, centroids_path: Path | None = None) -> None:
+    def __init__(self, path: Path, centroids_path: Path | None = None, contacts_path: Path | None = None) -> None:
         self.path = path
         self._rows = self._load(path)
+        # Load verified contacts table (up_municipality_contacts.csv)
+        self._contacts_by_code: dict[tuple[str, str], dict[str, str]] = {}
+        c_file = contacts_path or (path.parent / 'up_municipality_contacts.csv')
+        if c_file.exists():
+            with c_file.open('r', encoding='utf-8') as cf:
+                for cr in csv.DictReader(cf):
+                    ckey = (_normalise(cr.get('district', '')), cr.get('municipality_code', ''))
+                    self._contacts_by_code[ckey] = cr
         # Pre-build a normalised district → rows index for fast lookup.
         self._index: dict[str, list[dict[str, str]]] = {}
         for row in self._rows:
@@ -157,7 +167,7 @@ class UPWardDirectory:
         if district_key:
             rows = self._index.get(district_key, [])
             if rows:
-                return _best_row(rows, match_level='district')
+                return _best_row(rows, match_level='district', contacts_map=self._contacts_by_code)
 
         # --- Layer 3: nearest municipality via coordinates ---
         lat = coords[0] if coords else _float_val(address.get('lat') or address.get('latitude'))
@@ -205,11 +215,11 @@ class UPWardDirectory:
                 if r.get('municipality_code') == code
             ]
             if rows:
-                return _best_row(rows, match_level='nearest')
+                return _best_row(rows, match_level='nearest', contacts_map=self._contacts_by_code)
             # fallback to district rows
             dist_rows = self._index.get(dist_key, [])
             if dist_rows:
-                return _best_row(dist_rows, match_level='nearest')
+                return _best_row(dist_rows, match_level='nearest', contacts_map=self._contacts_by_code)
 
         return None
 
@@ -237,7 +247,7 @@ class UPWardDirectory:
             if district_rows:
                 candidate_rows = district_rows
 
-        return _best_row(candidate_rows, match_level='municipality')
+        return _best_row(candidate_rows, match_level='municipality', contacts_map=self._contacts_by_code)
 
     def _resolve_district_key(self, address: dict[str, str | None]) -> str | None:
         """Try multiple address fields to find a matching district key.
@@ -306,6 +316,7 @@ def _municipality_priority(row: dict[str, str]) -> int:
 def _best_row(
     rows: list[dict[str, str]],
     match_level: Literal['municipality', 'district', 'nearest', 'none'] = 'district',
+    contacts_map: dict[tuple[str, str], dict[str, str]] | None = None,
 ) -> UPWardContact | None:
     if not rows:
         return None
@@ -316,19 +327,56 @@ def _best_row(
     )
 
     for row in sorted_rows:
+        dist_key = _normalise(row.get('district', ''))
+        code = row.get('municipality_code', '')
+        contact_entry = (contacts_map or {}).get((dist_key, code))
+
         email = row.get('municipal_contact_email') or None
         fallback = row.get('fallback_contact_email') or None
-        if email or fallback:
+        channel = 'email'
+        portal_url = None
+        status = 'fallback'
+
+        if contact_entry:
+            c_email = (contact_entry.get('email') or '').strip()
+            c_portal = (contact_entry.get('portal_url') or '').strip()
+            c_status = (contact_entry.get('verification_status') or 'unverified').strip()
+            c_channel = (contact_entry.get('channel') or 'email').strip()
+
+            if c_email and c_status == 'verified':
+                email = c_email
+                status = 'verified'
+                channel = c_channel or 'email'
+            elif c_portal:
+                portal_url = c_portal
+                channel = 'portal'
+                status = c_status
+            elif c_email:
+                email = c_email
+                status = 'unverified'
+                channel = c_channel or 'email'
+
+        if not email and row.get('municipal_contact_email'):
+            email = row.get('municipal_contact_email')
+            status = 'verified'
+        elif not email and fallback:
+            email = fallback
+            channel = 'state'
+            status = 'fallback'
+
+        if email or portal_url:
             return UPWardContact(
                 district=row.get('district', ''),
-                municipality_code=row.get('municipality_code', ''),
+                municipality_code=code,
                 municipality_type=row.get('municipality_type', ''),
                 municipality_name_en=row.get('municipality_name_en', ''),
                 ward_number=row.get('ward_number', ''),
                 email=email,
                 fallback_email=fallback,
                 source_url='https://localbodies.up.nic.in/',
-                verification_status='verified' if email else 'fallback',
+                verification_status=status,
                 match_level=match_level,
+                channel=channel,
+                portal_url=portal_url,
             )
     return None
