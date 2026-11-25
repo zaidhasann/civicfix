@@ -11,7 +11,7 @@ separate FastAPI/LangGraph agent service.
 
 - `apps/web` - Next.js web application
 - `apps/api` - Express API and MongoDB data layer
-- `services/agent` - FastAPI AI agent pipeline
+- `services/agent` - FastAPI AI agent pipeline, recipient resolution, and jurisdiction directory
 
 ## Current workflow
 
@@ -20,9 +20,13 @@ The currently implemented report flow is:
 1. Register, sign in, or use an anonymous access token.
 2. Add a photo, location, and optional description.
 3. Save the report as a draft.
-4. Process the report and populate its classification, recipient, and email
-   draft.
-5. Review and edit the draft.
+4. Process the report and populate its classification, jurisdiction routing
+   (verified email, portal URL such as e-NagarSewa, or escalation contact),
+   and email draft.
+5. Review and edit the draft:
+   - Verified municipality contacts display a verified badge.
+   - Portal channels offer guided filing directly on e-NagarSewa with prefilled draft text.
+   - Unverified contacts require user confirmation prior to dispatch.
 6. Approve it, reject it, or regenerate the draft.
 
 The API also supports signed Cloudinary uploads and authenticated complaint
@@ -124,6 +128,13 @@ Run the agent tests from `services/agent`:
 ```powershell
 pytest
 ```
+
+Run directory coverage and audit reports:
+
+```powershell
+python scripts/coverage_report.py
+```
+
 
 ## API surface
 
