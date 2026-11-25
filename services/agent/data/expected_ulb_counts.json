@@ -1,0 +1,10 @@
+{
+  "_comment": "Expected Urban Local Bodies (ULB) count in Uttar Pradesh: ~17 Nagar Nigam, ~200 Nagar Palika Parishad, ~546 Nagar Panchayat (Total: ~763). District-level expected breakdown is not officially standardized in a machine-readable format across all 75 districts. Leave per-district mapping empty until an authenticated Directorate of Urban Local Bodies (DULB) dataset is provided.",
+  "expected_totals": {
+    "nagar_nigam": 17,
+    "nagar_palika_parishad": 200,
+    "nagar_panchayat": 546,
+    "total": 763
+  },
+  "district_expected_counts": {}
+}
